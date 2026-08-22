@@ -1,7 +1,7 @@
 /** Socle commun : appels API, panier, toasts, en-tête, animations. */
 
 import { t, lang, applyTranslations, setLang, onLangChange, money } from './i18n.js';
-import { icon } from './icons.js';
+import { icon, produceIcon } from './icons.js';
 
 /* ------------------------------ API ------------------------------ */
 
@@ -104,6 +104,7 @@ export function addToCart(product, qty) {
       unit: product.unit,
       price: product.price,
       icon: product.icon,
+      image: product.image || '',
       step: product.step,
       min: product.min,
       max: product.max,
@@ -211,6 +212,51 @@ async function mountShopPhone() {
   }
 }
 
+/** Enregistre le service worker (mode hors ligne + installation). */
+function mountServiceWorker() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service worker non enregistré :', err.message);
+    });
+  });
+}
+
+/**
+ * Bouton « installer l'application ». Le navigateur décide s'il propose
+ * l'installation : sans son feu vert, le bouton reste caché.
+ */
+function mountInstallPrompt() {
+  const button = document.querySelector('[data-install]');
+  if (!button) return;
+  let deferred = null;
+
+  addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferred = event;
+    button.hidden = false;
+  });
+
+  button.addEventListener('click', async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice;
+    deferred = null;
+    button.hidden = true;
+  });
+
+  addEventListener('appinstalled', () => {
+    deferred = null;
+    button.hidden = true;
+  });
+}
+
+/** Prévient quand la connexion tombe ou revient. */
+function mountNetworkStatus() {
+  addEventListener('offline', () => toast(t('net.offline'), 'error'));
+  addEventListener('online', () => toast(t('net.online')));
+}
+
 export function initShell() {
   applyTranslations();
   mountIcons();
@@ -218,6 +264,9 @@ export function initShell() {
   mountReveal();
   updateCartCount();
   mountShopPhone();
+  mountServiceWorker();
+  mountInstallPrompt();
+  mountNetworkStatus();
 
   onLangChange(() => {
     mountLangSwitch();
@@ -225,6 +274,13 @@ export function initShell() {
       el.textContent = money(Number(el.dataset.money));
     }
   });
+}
+
+/** Vignette d'une ligne de panier : photo du produit si elle existe. */
+export function lineMedia(item) {
+  return item.image
+    ? `<img src="${esc(item.image)}" alt="" loading="lazy">`
+    : produceIcon(item.icon);
 }
 
 /** Petit utilitaire de gabarit : échappe le texte injecté en HTML. */

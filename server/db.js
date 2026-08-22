@@ -16,10 +16,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     slug           TEXT    NOT NULL UNIQUE,
-    name_ar        TEXT    NOT NULL,
-    name_fr        TEXT    NOT NULL,
-    desc_ar        TEXT    NOT NULL DEFAULT '',
-    desc_fr        TEXT    NOT NULL DEFAULT '',
+    name           TEXT    NOT NULL,
+    description    TEXT    NOT NULL DEFAULT '',
     category       TEXT    NOT NULL,
     icon           TEXT    NOT NULL DEFAULT 'leaf',
     unit           TEXT    NOT NULL DEFAULT 'kg',
@@ -28,15 +26,13 @@ db.exec(`
     min_qty        REAL    NOT NULL DEFAULT 1,
     max_qty        REAL    NOT NULL DEFAULT 30,
     stock_qty      REAL    NOT NULL DEFAULT 0,
-    farmer_ar      TEXT    NOT NULL DEFAULT '',
-    farmer_fr      TEXT    NOT NULL DEFAULT '',
-    region_ar      TEXT    NOT NULL DEFAULT '',
-    region_fr      TEXT    NOT NULL DEFAULT '',
-    harvested_ar   TEXT    NOT NULL DEFAULT '',
-    harvested_fr   TEXT    NOT NULL DEFAULT '',
+    farmer         TEXT    NOT NULL DEFAULT '',
+    region         TEXT    NOT NULL DEFAULT '',
+    harvested      TEXT    NOT NULL DEFAULT '',
     is_bio         INTEGER NOT NULL DEFAULT 0,
     is_available   INTEGER NOT NULL DEFAULT 1,
-    sort_order     INTEGER NOT NULL DEFAULT 0
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    image_path     TEXT    NOT NULL DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS orders (
@@ -62,8 +58,7 @@ db.exec(`
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id            INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     product_id          INTEGER NOT NULL,
-    name_ar             TEXT    NOT NULL,
-    name_fr             TEXT    NOT NULL,
+    name                TEXT    NOT NULL,
     unit                TEXT    NOT NULL,
     qty                 REAL    NOT NULL,
     unit_price_millimes INTEGER NOT NULL,
@@ -75,10 +70,61 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_items_order    ON order_items(order_id);
 `);
 
+/**
+ * Migrations : ajoute les colonnes apparues après la première mise en service,
+ * pour qu'une base existante continue de fonctionner sans être recréée.
+ */
+function addMissingColumns(table, columns) {
+  const existing = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+  for (const [name, definition] of Object.entries(columns)) {
+    if (!existing.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+}
+
+/**
+ * Fusionne une ancienne paire de colonnes bilingues (arabe/français) en une
+ * seule colonne — le catalogue est passé à un texte unique par produit.
+ * Ne fait rien sur une base déjà migrée (ou neuve, créée directement avec
+ * la colonne unique par le CREATE TABLE ci-dessus).
+ */
+function mergeBilingualColumn(table, arColumn, frColumn, newColumn) {
+  const existing = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+  if (existing.has(newColumn) || (!existing.has(arColumn) && !existing.has(frColumn))) return;
+
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${newColumn} TEXT NOT NULL DEFAULT ''`);
+  const arExpr = existing.has(arColumn) ? arColumn : `''`;
+  const frExpr = existing.has(frColumn) ? frColumn : `''`;
+  // Conserve la valeur arabe si elle existe, sinon la française.
+  db.exec(`UPDATE ${table} SET ${newColumn} = CASE WHEN ${arExpr} != '' THEN ${arExpr} ELSE ${frExpr} END`);
+  if (existing.has(arColumn)) db.exec(`ALTER TABLE ${table} DROP COLUMN ${arColumn}`);
+  if (existing.has(frColumn)) db.exec(`ALTER TABLE ${table} DROP COLUMN ${frColumn}`);
+}
+
+addMissingColumns('products', { image_path: `TEXT NOT NULL DEFAULT ''` });
+mergeBilingualColumn('products', 'name_ar', 'name_fr', 'name');
+mergeBilingualColumn('products', 'desc_ar', 'desc_fr', 'description');
+mergeBilingualColumn('products', 'farmer_ar', 'farmer_fr', 'farmer');
+mergeBilingualColumn('products', 'region_ar', 'region_fr', 'region');
+mergeBilingualColumn('products', 'harvested_ar', 'harvested_fr', 'harvested');
+mergeBilingualColumn('order_items', 'name_ar', 'name_fr', 'name');
+
+/** Dossier des photos produits, à l'intérieur de data/ (volume persistant). */
+export const UPLOADS_DIR = join(dataDir, 'uploads');
+mkdirSync(UPLOADS_DIR, { recursive: true });
+
 /** Order lifecycle, in the sequence the seller walks through. */
 export const ORDER_STATUSES = ['pending', 'confirmed', 'preparing', 'on_the_way', 'delivered', 'cancelled'];
 
 export const PRODUCT_CATEGORIES = ['vegetables', 'fruits', 'pantry', 'animal'];
+
+/** Unités de vente proposées au vendeur. */
+export const PRODUCT_UNITS = ['kg', 'L', 'piece', 'bunch', 'dozen', 'jar'];
+
+/** Illustrations disponibles quand le vendeur ne met pas de photo. */
+export const PRODUCT_ICONS = [
+  'tomato', 'potato', 'onion', 'carrot', 'pepper', 'zucchini', 'lettuce', 'herb',
+  'orange', 'lemon', 'apple', 'dates', 'oil', 'honey', 'eggs', 'milk', 'chicken', 'leaf', 'basket',
+];
 
 export const SHOP = {
   deliveryMillimes: 5000,

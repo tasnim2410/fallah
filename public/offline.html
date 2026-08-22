@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#15803d">
+  <title>لا يوجد اتصال بالإنترنت — فلّاح</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="فلّاح">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="section">
+    <div class="container" style="max-width: 560px; text-align: center">
+      <div class="panel">
+        <div style="width:72px;height:72px;margin-inline:auto;display:grid;place-items:center;background:var(--warning-soft);color:var(--warning);border-radius:999px">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 4-2.5M2 8.8A15 15 0 0 1 7 6M22 8.8a15 15 0 0 0-9-3.7M19 13a10 10 0 0 0-3-2"/>
+            <path d="M12 20h.01"/>
+          </svg>
+        </div>
+
+        <h1 style="margin-block-start: var(--space-4); font-size: 1.5rem">لا يوجد اتصال بالإنترنت</h1>
+        <p class="muted">تعذّر الوصول إلى المتجر. تحقّق من اتصالك وأعد المحاولة.</p>
+        <p class="muted" lang="fr" dir="ltr">Pas de connexion. Vérifiez votre réseau et réessayez.</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);justify-content:center;margin-block-start:var(--space-5)">
+          <button type="button" class="btn" onclick="location.reload()">أعد المحاولة · Réessayer</button>
+          <a class="btn btn--ghost" href="/">المتجر · Boutique</a>
+        </div>
+
+        <p class="field__hint" style="margin-block-start: var(--space-5)">
+          المنتجات التي تصفّحتها سابقًا تبقى معروضة من دون اتصال، أمّا إتمام الطلب فيتطلّب اتصالًا بالإنترنت.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Dès que la connexion revient, on repart tout seul.
+    addEventListener('online', () => location.reload());
+  </script>
+</body>
+</html>

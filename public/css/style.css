@@ -61,6 +61,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* `hidden` doit toujours l'emporter : plusieurs composants (boutons, tiroir)
+   imposent un display qui, sinon, réaffiche l'élément masqué. */
+[hidden] { display: none !important; }
+
 html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-h) + 16px); }
 
 body {
@@ -85,8 +89,9 @@ a { color: var(--primary); }
 
 img, svg { max-width: 100%; }
 
-/* Taille par défaut des illustrations produits ; chaque contexte l'ajuste. */
+/* Tailles par défaut des SVG ; chaque contexte les ajuste ensuite. */
 .produce-icon { display: block; width: 48px; height: 48px; }
+.icon { display: inline-block; width: 20px; height: 20px; vertical-align: middle; flex: none; }
 
 :focus-visible {
   outline: 3px solid var(--primary);
@@ -383,6 +388,11 @@ img, svg { max-width: 100%; }
 }
 .product-card__media .produce-icon { width: 96px; height: 96px; }
 
+/* Photo réelle : elle occupe toute la zone média, sans déformation. */
+.product-card__media--photo { padding: 0; }
+.product-card__photo { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.cart-line__icon img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius); }
+
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px var(--space-3);
@@ -439,8 +449,6 @@ img, svg { max-width: 100%; }
   transition: opacity .25s var(--ease), visibility .25s var(--ease);
 }
 .drawer-backdrop.is-open { opacity: 1; visibility: visible; }
-/* `hidden` doit l'emporter sur le display de ces deux blocs (focus clavier). */
-.drawer[hidden], .drawer-backdrop[hidden] { display: none; }
 
 .drawer {
   position: fixed;
@@ -689,6 +697,90 @@ table.admin-table input { min-height: 40px; max-width: 120px; }
 
 .switch { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
 .switch input { width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer; }
+.switch-row { display: flex; flex-wrap: wrap; gap: var(--space-5); margin-block-start: var(--space-3); }
+
+/* Vignette produit dans le tableau du vendeur */
+.product-thumb {
+  width: 54px; height: 54px;
+  display: grid; place-items: center;
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.product-thumb .produce-icon { width: 36px; height: 36px; }
+.row-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* ---------------- Fiche produit (dialog) ---------------- */
+
+.dialog {
+  width: min(860px, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-5));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: var(--shadow-lg);
+}
+.dialog::backdrop { background: rgba(20, 83, 45, .45); backdrop-filter: blur(2px); }
+.dialog form { display: flex; flex-direction: column; max-height: inherit; }
+
+.dialog__head {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-block-end: 1px solid var(--border);
+}
+.dialog__head h2 { margin: 0; font-size: 1.2rem; }
+.dialog__head .drawer__close { margin-inline-start: auto; }
+.dialog__body { flex: 1; overflow-y: auto; padding: var(--space-5); }
+.dialog__foot {
+  display: flex; justify-content: flex-end; gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-block-start: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.form-section { margin: 0 0 var(--space-5); padding: 0; border: 0; }
+.form-section legend {
+  padding: 0 0 var(--space-3);
+  font-weight: 700; font-size: .95rem; color: var(--primary);
+}
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 var(--space-4); }
+.form-grid .field { margin-block-end: var(--space-3); }
+
+.photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-block-end: var(--space-4); }
+.photo-preview {
+  width: 120px; height: 120px; flex: none;
+  display: grid; place-items: center;
+  background: var(--muted);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.photo-preview .produce-icon { width: 56px; height: 56px; opacity: .8; }
+.photo-row label.btn { cursor: pointer; }
+
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+.icon-picker button {
+  aspect-ratio: 1 / 1;
+  display: grid; place-items: center;
+  padding: var(--space-1);
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color .15s var(--ease), background-color .15s var(--ease);
+}
+.icon-picker button:hover { background: var(--primary-soft); }
+.icon-picker button[aria-checked='true'] { border-color: var(--primary); background: var(--primary-soft); }
+.icon-picker .produce-icon { width: 32px; height: 32px; }
 
 /* ---------------- Toasts ---------------- */
 

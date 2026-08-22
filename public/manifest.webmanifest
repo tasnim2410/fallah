@@ -1,0 +1,35 @@
+{
+  "name": "فلّاح — منتجات طازجة من المزرعة",
+  "short_name": "فلّاح",
+  "description": "خضار وفواكه طازجة من المزارع مباشرة إلى باب منزلك. تأكيد الطلب عبر الهاتف والدفع عند الاستلام. / Fruits et légumes frais, direct producteur, paiement à la livraison.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#f0fdf4",
+  "theme_color": "#15803d",
+  "categories": ["food", "shopping", "lifestyle"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "تتبّع طلبك",
+      "short_name": "تتبّع",
+      "description": "معرفة حالة طلب جارٍ",
+      "url": "/track.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "لوحة البائع",
+      "short_name": "البائع",
+      "description": "إدارة الطلبات والمخزون",
+      "url": "/admin.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

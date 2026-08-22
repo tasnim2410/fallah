@@ -3,11 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="فلاّح — خضرة وغلال طازجة من الفلاّح مباشرة لباب دارك. اطلب بالتلفون والخلاص عند الاستلام. / Fallah : fruits et légumes frais, direct producteur, paiement à la livraison.">
+  <meta name="description" content="فلّاح — خضار وفواكه طازجة من المزارع مباشرة إلى باب منزلك. اطلب عبر الهاتف والدفع عند الاستلام. / Fallah : fruits et légumes frais, direct producteur, paiement à la livraison.">
   <meta name="theme-color" content="#15803d">
   <meta name="page-title-key" content="nav.shop">
-  <title>فلاّح — منتجات طازجة من الضيعة</title>
+  <title>فلّاح — منتجات طازجة من المزرعة</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="فلّاح">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -22,15 +28,19 @@
           </svg>
         </span>
         <span>
-          <span data-i18n="brand.name">فلاّح</span>
-          <small class="brand__tag" data-i18n="brand.tag">من الضيعة لباب دارك</small>
+          <span data-i18n="brand.name">فلّاح</span>
+          <small class="brand__tag" data-i18n="brand.tag">من المزرعة إلى باب منزلك</small>
         </span>
       </a>
 
       <nav class="site-nav" aria-label="Navigation">
         <a href="#products" data-i18n="nav.shop">المنتجات</a>
-        <a href="#how" data-i18n="nav.how">كيفاش تطلب</a>
-        <a href="/track.html" data-i18n="nav.track">تبّع طلبيتك</a>
+        <a href="#how" data-i18n="nav.how">كيفية الطلب</a>
+        <a href="/track.html" data-i18n="nav.track">تتبّع طلبك</a>
+        <button type="button" class="btn btn--ghost btn--sm" data-install hidden>
+          <span data-icon="package"></span>
+          <span data-i18n="pwa.install"></span>
+        </button>
         <div class="lang-switch" data-lang-switch></div>
         <button type="button" class="btn btn--ghost btn--sm cart-btn always-visible" id="open-cart" data-i18n-aria="nav.cart">
           <span data-icon="cart"></span>
@@ -48,16 +58,16 @@
         <div>
           <span class="hero__eyebrow">
             <span data-icon="sprout"></span>
-            <span data-i18n="hero.eyebrow">مقطوف اليوم من ضيعات تونسية</span>
+            <span data-i18n="hero.eyebrow">قُطف اليوم من مزارع تونسية</span>
           </span>
-          <h1 style="margin-block-start: var(--space-4)" data-i18n="hero.title">خضرة وغلال طازجة، من الفلاّح مباشرة لدارك</h1>
+          <h1 style="margin-block-start: var(--space-4)" data-i18n="hero.title">خضار وفواكه طازجة، من المزارع مباشرة إلى منزلك</h1>
           <p class="lead" data-i18n="hero.lead"></p>
           <div class="hero__actions">
             <a class="btn" href="#products">
               <span data-icon="cart"></span>
               <span data-i18n="hero.cta">اطلب الآن</span>
             </a>
-            <a class="btn btn--ghost" href="#how" data-i18n="hero.how">كيفاش يخدم؟</a>
+            <a class="btn btn--ghost" href="#how" data-i18n="hero.how">كيف تعمل الخدمة؟</a>
           </div>
         </div>
         <div class="hero__art" id="hero-art" aria-hidden="true"></div>

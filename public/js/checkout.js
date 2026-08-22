@@ -1,10 +1,10 @@
 /** Page commande : récapitulatif, formulaire client, envoi et confirmation. */
 
-import { t, lang, pick, money, qtyLabel, onLangChange } from './i18n.js';
+import { t, lang, money, qtyLabel, onLangChange } from './i18n.js';
 import { produceIcon } from './icons.js';
 import {
   initShell, api, getConfig, toast, esc,
-  getCart, clearCart, cartSubtotal, deliveryFee,
+  getCart, clearCart, cartSubtotal, deliveryFee, lineMedia,
 } from './app.js';
 
 const form = document.getElementById('order-form');
@@ -41,9 +41,9 @@ function renderSummary() {
     .map(
       (item) => `
       <div class="cart-line">
-        <div class="cart-line__icon">${produceIcon(item.icon)}</div>
+        <div class="cart-line__icon">${lineMedia(item)}</div>
         <div class="cart-line__main">
-          <div class="cart-line__name">${esc(pick(item.name))}</div>
+          <div class="cart-line__name">${esc(item.name)}</div>
           <div class="cart-line__meta">${esc(qtyLabel(item.qty, item.unit))} × ${esc(money(item.price))}</div>
         </div>
         <strong>${esc(money(Math.round(item.price * item.qty)))}</strong>

@@ -1,11 +1,11 @@
 /** Page boutique : catalogue, sélecteur de quantité, panier latéral. */
 
-import { t, pick, money, qtyLabel, onLangChange } from './i18n.js';
+import { t, money, qtyLabel, onLangChange } from './i18n.js';
 import { produceIcon, icon } from './icons.js';
 import {
   initShell, api, getConfig, toast, esc,
   getCart, addToCart, setCartQty, removeFromCart, onCartChange,
-  cartSubtotal, deliveryFee,
+  cartSubtotal, deliveryFee, lineMedia,
 } from './app.js';
 
 const CATEGORIES = ['all', 'vegetables', 'fruits', 'pantry', 'animal'];
@@ -48,8 +48,7 @@ function visibleProducts() {
   return products.filter((p) => {
     if (activeCategory !== 'all' && p.category !== activeCategory) return false;
     if (!term) return true;
-    return [p.name.ar, p.name.fr, p.farmer.ar, p.farmer.fr, p.region.ar, p.region.fr]
-      .join(' ').toLowerCase().includes(term);
+    return [p.name, p.farmer, p.region].join(' ').toLowerCase().includes(term);
   });
 }
 
@@ -69,26 +68,39 @@ function qtyControl(p, value, { small = false } = {}) {
     </div>`;
 }
 
+/** Photo du vendeur si elle existe, sinon l'illustration du produit. */
+function productMedia(p, alt) {
+  return p.image
+    ? `<img class="product-card__photo" src="${esc(p.image)}" alt="${esc(alt)}" loading="lazy" decoding="async">`
+    : produceIcon(p.icon);
+}
+
 function productCard(p) {
   const qty = draftQty.get(p.id) ?? p.min;
   const out = !p.isAvailable;
   return `
     <article class="product-card${out ? ' product-card--out' : ''}" data-product="${p.id}">
-      <div class="product-card__media">
+      <div class="product-card__media${p.image ? ' product-card__media--photo' : ''}">
         <div class="product-card__badges">
           ${p.isBio ? `<span class="badge badge--bio">${esc(t('product.bio'))}</span>` : ''}
           ${out
             ? `<span class="badge badge--out">${esc(t('product.out'))}</span>`
-            : `<span class="badge badge--fresh">${esc(t('product.harvested', { when: pick(p.harvested) }))}</span>`}
+            : p.harvested
+              ? `<span class="badge badge--fresh">${esc(t('product.harvested', { when: p.harvested }))}</span>`
+              : ''}
         </div>
-        ${produceIcon(p.icon)}
+        ${productMedia(p, p.name)}
       </div>
       <div class="product-card__body">
-        <h3 class="product-card__name">${esc(pick(p.name))}</h3>
-        <span class="product-card__farmer">
-          ${icon('pin')}${esc(t('product.from'))} ${esc(pick(p.farmer))} · ${esc(pick(p.region))}
-        </span>
-        <p class="product-card__desc">${esc(pick(p.description))}</p>
+        <h3 class="product-card__name">${esc(p.name)}</h3>
+        ${p.farmer || p.region
+          ? `<span class="product-card__farmer">
+               ${icon('pin')}${p.farmer ? `${esc(t('product.from'))} ${esc(p.farmer)}` : ''}${
+                 p.farmer && p.region ? ' · ' : ''
+               }${esc(p.region)}
+             </span>`
+          : ''}
+        <p class="product-card__desc">${esc(p.description)}</p>
         <div class="product-card__price">
           ${esc(money(p.price))} <small>/ ${esc(t(`unit.${p.unit}`))}</small>
         </div>
@@ -134,7 +146,7 @@ grid.addEventListener('click', (event) => {
   if (event.target.closest('[data-add]')) {
     const qty = draftQty.get(product.id) ?? product.min;
     addToCart(product, qty);
-    toast(t('product.added', { name: pick(product.name) }));
+    toast(t('product.added', { name: product.name }));
     openCart();
   }
 });
@@ -193,9 +205,9 @@ function cartLine(item) {
   const bounds = product || { min: item.min, max: item.max, step: item.step, stock: item.max, unit: item.unit, price: item.price };
   return `
     <div class="cart-line" data-line="${item.productId}">
-      <div class="cart-line__icon">${produceIcon(item.icon)}</div>
+      <div class="cart-line__icon">${lineMedia(item)}</div>
       <div class="cart-line__main">
-        <div class="cart-line__name">${esc(pick(item.name))}</div>
+        <div class="cart-line__name">${esc(item.name)}</div>
         <div class="cart-line__meta">${esc(money(item.price))} / ${esc(t(`unit.${item.unit}`))}</div>
         <div class="cart-line__controls">
           ${qtyControl({ ...bounds, price: item.price, unit: item.unit }, item.qty, { small: true })}

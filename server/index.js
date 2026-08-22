@@ -1,12 +1,17 @@
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { db, ORDER_STATUSES, SHOP, nextOrderReference } from './db.js';
+import {
+  db, ORDER_STATUSES, PRODUCT_CATEGORIES, PRODUCT_UNITS, PRODUCT_ICONS,
+  SHOP, UPLOADS_DIR, nextOrderReference,
+} from './db.js';
 import { seedProducts } from './seed.js';
-import { GOVERNORATES, validateCustomer, validateCartShape } from './validate.js';
+import {
+  GOVERNORATES, validateCustomer, validateCartShape, validateProduct, slugify, detectImage,
+} from './validate.js';
 
 try {
   process.loadEnvFile();
@@ -39,6 +44,7 @@ const MIME = {
   '.webp': 'image/webp',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 function sendJson(res, status, payload) {
@@ -53,6 +59,15 @@ function sendJson(res, status, payload) {
 
 const fail = (res, status, code, field) => sendJson(res, status, { error: code, field });
 
+/**
+ * Coupe la lecture d'un corps trop gros sans casser la connexion : on met le
+ * flux en pause pour que la réponse d'erreur parte, puis on ferme proprement.
+ */
+function stopReading(req, res) {
+  req.pause();
+  res.on('finish', () => req.destroy());
+}
+
 function readJsonBody(req, limitBytes = 64 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -61,7 +76,6 @@ function readJsonBody(req, limitBytes = 64 * 1024) {
       size += chunk.length;
       if (size > limitBytes) {
         reject(new Error('payload_too_large'));
-        req.destroy();
         return;
       }
       chunks.push(chunk);
@@ -98,6 +112,15 @@ function resolveFile(pathname) {
   return {};
 }
 
+/**
+ * Le code du site (HTML, JS, CSS, manifeste, service worker) n'a pas de nom
+ * versionné : s'il est mis en cache « en dur », le navigateur peut garder un
+ * ancien script tout en chargeant la nouvelle page — l'interface se retrouve
+ * alors désynchronisée. Ces fichiers sont donc toujours revalidés (304 si rien
+ * n'a changé), tandis que les images et polices gardent un vrai cache.
+ */
+const REVALIDATE_EXTENSIONS = new Set(['.html', '.js', '.css', '.webmanifest', '.json']);
+
 function serveStatic(req, res, pathname) {
   const { filePath, forbidden } = resolveFile(pathname);
   if (forbidden) return fail(res, 403, 'forbidden');
@@ -110,13 +133,30 @@ function serveStatic(req, res, pathname) {
     return;
   }
 
-  const type = MIME[extname(filePath).toLowerCase()] || 'application/octet-stream';
-  const isHtml = type.startsWith('text/html');
-  res.writeHead(200, {
+  const extension = extname(filePath).toLowerCase();
+  const type = MIME[extension] || 'application/octet-stream';
+  const stats = statSync(filePath);
+  const etag = `W/"${stats.size.toString(16)}-${Math.trunc(stats.mtimeMs).toString(16)}"`;
+  const lastModified = stats.mtime.toUTCString();
+
+  const headers = {
     'Content-Type': type,
-    'Cache-Control': isHtml ? 'no-cache' : 'public, max-age=3600',
+    'Cache-Control': REVALIDATE_EXTENSIONS.has(extension) ? 'no-cache' : 'public, max-age=3600',
     'X-Content-Type-Options': 'nosniff',
-  });
+    ETag: etag,
+    'Last-Modified': lastModified,
+  };
+
+  // Le fichier n'a pas bougé depuis la copie du navigateur : rien à renvoyer.
+  const knownEtag = req.headers['if-none-match'];
+  const knownDate = req.headers['if-modified-since'];
+  if (knownEtag === etag || (!knownEtag && knownDate === lastModified)) {
+    res.writeHead(304, headers);
+    return res.end();
+  }
+
+  res.writeHead(200, { ...headers, 'Content-Length': stats.size });
+  if (req.method === 'HEAD') return res.end();
   createReadStream(filePath).pipe(res);
 }
 
@@ -200,13 +240,14 @@ function isAdmin(req) {
 const publicProduct = (row) => ({
   id: row.id,
   slug: row.slug,
-  name: { ar: row.name_ar, fr: row.name_fr },
-  description: { ar: row.desc_ar, fr: row.desc_fr },
-  farmer: { ar: row.farmer_ar, fr: row.farmer_fr },
-  region: { ar: row.region_ar, fr: row.region_fr },
-  harvested: { ar: row.harvested_ar, fr: row.harvested_fr },
+  name: row.name,
+  description: row.description,
+  farmer: row.farmer,
+  region: row.region,
+  harvested: row.harvested,
   category: row.category,
   icon: row.icon,
+  image: row.image_path || '',
   unit: row.unit,
   price: row.price_millimes,
   step: row.step_qty,
@@ -223,7 +264,7 @@ const orderItems = (orderId) =>
     .all(orderId)
     .map((i) => ({
       productId: i.product_id,
-      name: { ar: i.name_ar, fr: i.name_fr },
+      name: i.name,
       unit: i.unit,
       qty: i.qty,
       unitPrice: i.unit_price_millimes,
@@ -277,7 +318,7 @@ function getProducts(res, url) {
   if (category && category !== 'all') rows = rows.filter((r) => r.category === category);
   if (search) {
     rows = rows.filter((r) =>
-      [r.name_ar, r.name_fr, r.farmer_ar, r.farmer_fr, r.region_ar, r.region_fr]
+      [r.name, r.farmer, r.region]
         .join(' ')
         .toLowerCase()
         .includes(search)
@@ -293,7 +334,9 @@ async function createOrder(req, res, ip) {
   try {
     body = await readJsonBody(req);
   } catch (err) {
-    return fail(res, 400, err.message === 'payload_too_large' ? 'payload_too_large' : 'invalid_json');
+    if (err.message !== 'payload_too_large') return fail(res, 400, 'invalid_json');
+    stopReading(req, res);
+    return fail(res, 413, 'payload_too_large');
   }
 
   const customer = validateCustomer(body?.customer);
@@ -333,8 +376,8 @@ async function createOrder(req, res, ip) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
   `);
   const insertItem = db.prepare(`
-    INSERT INTO order_items (order_id, product_id, name_ar, name_fr, unit, qty, unit_price_millimes, line_millimes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO order_items (order_id, product_id, name, unit, qty, unit_price_millimes, line_millimes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   const decStock = db.prepare('UPDATE products SET stock_qty = MAX(0, stock_qty - ?) WHERE id = ?');
 
@@ -347,7 +390,7 @@ async function createOrder(req, res, ip) {
       c.lang, subtotal, delivery, total, now, now
     );
     for (const { p, qty, lineTotal } of lines) {
-      insertItem.run(Number(lastInsertRowid), p.id, p.name_ar, p.name_fr, p.unit, qty, p.price_millimes, lineTotal);
+      insertItem.run(Number(lastInsertRowid), p.id, p.name, p.unit, qty, p.price_millimes, lineTotal);
       decStock.run(qty, p.id);
     }
     db.exec('COMMIT');
@@ -439,41 +482,189 @@ async function adminUpdateOrder(req, res, id) {
   sendJson(res, 200, { order: adminOrder(db.prepare('SELECT * FROM orders WHERE id = ?').get(id)) });
 }
 
+const adminProduct = (row) => ({ ...publicProduct(row), isAvailable: Boolean(row.is_available) });
+
 function adminProducts(res) {
   sendJson(res, 200, {
-    products: db.prepare('SELECT * FROM products ORDER BY sort_order, id').all().map((row) => ({
-      ...publicProduct(row),
-      isAvailable: Boolean(row.is_available),
-    })),
+    products: db.prepare('SELECT * FROM products ORDER BY sort_order, id').all().map(adminProduct),
+    units: PRODUCT_UNITS,
+    categories: PRODUCT_CATEGORIES,
+    icons: PRODUCT_ICONS,
   });
+}
+
+const PRODUCT_RULES = { units: PRODUCT_UNITS, categories: PRODUCT_CATEGORIES, icons: PRODUCT_ICONS };
+
+/** Rend le slug unique en ajoutant -2, -3… si besoin. */
+function uniqueSlug(base, excludeId = 0) {
+  const taken = db.prepare('SELECT slug FROM products WHERE id != ?').all(excludeId).map((r) => r.slug);
+  if (!taken.includes(base)) return base;
+  let n = 2;
+  while (taken.includes(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+/** Colonnes de la table pour chaque champ validé. */
+const PRODUCT_COLUMNS = {
+  name: 'name', description: 'description', farmer: 'farmer', region: 'region', harvested: 'harvested',
+  category: 'category', unit: 'unit', icon: 'icon',
+  price: 'price_millimes', stock: 'stock_qty', step: 'step_qty', min: 'min_qty', max: 'max_qty',
+  isBio: 'is_bio', isAvailable: 'is_available',
+};
+
+async function adminCreateProduct(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req, 16 * 1024);
+  } catch {
+    return fail(res, 400, 'invalid_json');
+  }
+
+  const checked = validateProduct(body, PRODUCT_RULES);
+  if (!checked.ok) return fail(res, 400, checked.code, checked.field);
+
+  const v = checked.value;
+  const slug = uniqueSlug(slugify(v.name));
+  // Le nouveau produit se place en fin de catalogue.
+  const { last } = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS last FROM products').get();
+
+  const columns = Object.keys(PRODUCT_COLUMNS).filter((key) => v[key] !== undefined);
+  const { lastInsertRowid } = db
+    .prepare(
+      `INSERT INTO products (slug, sort_order, ${columns.map((k) => PRODUCT_COLUMNS[k]).join(', ')})
+       VALUES (?, ?, ${columns.map(() => '?').join(', ')})`
+    )
+    .run(slug, last + 10, ...columns.map((k) => v[k]));
+
+  const created = db.prepare('SELECT * FROM products WHERE id = ?').get(Number(lastInsertRowid));
+  console.log(`[catalogue] produit ajouté : ${created.name} (${slug})`);
+  sendJson(res, 201, { product: adminProduct(created) });
 }
 
 async function adminUpdateProduct(req, res, id) {
   let body;
   try {
-    body = await readJsonBody(req, 8192);
+    body = await readJsonBody(req, 16 * 1024);
   } catch {
     return fail(res, 400, 'invalid_json');
   }
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
   if (!product) return fail(res, 404, 'product_not_found');
 
-  const price = body?.price === undefined ? product.price_millimes : Math.round(Number(body.price));
-  const stock = body?.stock === undefined ? product.stock_qty : Number(body.stock);
-  const available = body?.isAvailable === undefined ? product.is_available : Number(Boolean(body.isAvailable));
+  // `partial` : le tableau de bord peut n'envoyer que le prix ou le stock.
+  const checked = validateProduct(body, { ...PRODUCT_RULES, partial: true });
+  if (!checked.ok) return fail(res, 400, checked.code, checked.field);
 
-  if (!Number.isFinite(price) || price < 100 || price > 1_000_000) return fail(res, 400, 'price_invalid', 'price');
-  if (!Number.isFinite(stock) || stock < 0 || stock > 100_000) return fail(res, 400, 'stock_invalid', 'stock');
+  const v = checked.value;
+  // Contrôle croisé quand un seul des deux bornes est modifié.
+  const min = v.min ?? product.min_qty;
+  const max = v.max ?? product.max_qty;
+  if (min > max) return fail(res, 400, 'min_above_max', 'min');
 
-  db.prepare('UPDATE products SET price_millimes = ?, stock_qty = ?, is_available = ? WHERE id = ?')
-    .run(price, stock, available, id);
+  const columns = Object.keys(PRODUCT_COLUMNS).filter((key) => v[key] !== undefined);
+  if (columns.length) {
+    const assignments = columns.map((k) => `${PRODUCT_COLUMNS[k]} = ?`).join(', ');
+    const slug = v.name !== undefined ? uniqueSlug(slugify(v.name), id) : product.slug;
+    db.prepare(`UPDATE products SET ${assignments}, slug = ? WHERE id = ?`)
+      .run(...columns.map((k) => v[k]), slug, id);
+  }
 
-  sendJson(res, 200, {
-    product: {
-      ...publicProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(id)),
-      isAvailable: Boolean(available),
-    },
+  sendJson(res, 200, { product: adminProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(id)) });
+}
+
+function adminDeleteProduct(res, id) {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+  if (!product) return fail(res, 404, 'product_not_found');
+
+  // Les commandes gardent leur propre copie du nom et du prix : l'historique
+  // reste lisible même après la suppression du produit.
+  db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  if (product.image_path) removeUpload(product.image_path);
+
+  console.log(`[catalogue] produit supprimé : ${product.name} (${product.slug})`);
+  sendJson(res, 200, { deleted: id });
+}
+
+/** Supprime une photo du disque, en restant confiné au dossier des envois. */
+function removeUpload(imagePath) {
+  const name = imagePath.replace('/uploads/', '');
+  if (!/^[\w.-]+$/.test(name)) return;
+  try {
+    unlinkSync(join(UPLOADS_DIR, name));
+  } catch {
+    // Fichier déjà absent : rien à faire.
+  }
+}
+
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+
+/** Reçoit la photo brute (corps binaire) et la range dans data/uploads/. */
+function readBinaryBody(req, limitBytes) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > limitBytes) {
+        reject(new Error('image_too_large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
   });
+}
+
+async function adminUploadImage(req, res, id) {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+  if (!product) return fail(res, 404, 'product_not_found');
+
+  let buffer;
+  try {
+    buffer = await readBinaryBody(req, MAX_IMAGE_BYTES);
+  } catch (err) {
+    if (err.message !== 'image_too_large') return fail(res, 400, 'upload_failed');
+    stopReading(req, res);
+    return fail(res, 413, 'image_too_large', 'image');
+  }
+
+  const kind = detectImage(buffer);
+  if (!kind) return fail(res, 415, 'image_type_invalid', 'image');
+
+  const name = `${product.slug}-${randomBytes(6).toString('hex')}.${kind.ext}`;
+  writeFileSync(join(UPLOADS_DIR, name), buffer);
+  if (product.image_path) removeUpload(product.image_path);
+
+  const imagePath = `/uploads/${name}`;
+  db.prepare('UPDATE products SET image_path = ? WHERE id = ?').run(imagePath, id);
+  sendJson(res, 200, { product: adminProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(id)) });
+}
+
+function adminDeleteImage(res, id) {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+  if (!product) return fail(res, 404, 'product_not_found');
+  if (product.image_path) removeUpload(product.image_path);
+  db.prepare(`UPDATE products SET image_path = '' WHERE id = ?`).run(id);
+  sendJson(res, 200, { product: adminProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(id)) });
+}
+
+/** Sert une photo produit depuis data/uploads/ (hors de public/). */
+function serveUpload(res, pathname) {
+  const name = pathname.slice('/uploads/'.length);
+  // Nom de fichier strict : ni chemin, ni caractère spécial.
+  if (!/^[\w.-]+$/.test(name) || name.includes('..')) return fail(res, 403, 'forbidden');
+
+  const filePath = join(UPLOADS_DIR, name);
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) return fail(res, 404, 'not_found');
+
+  const type = MIME[extname(filePath).toLowerCase()] || 'application/octet-stream';
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Cache-Control': 'public, max-age=86400',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  createReadStream(filePath).pipe(res);
 }
 
 /* ------------------------------------------------------------------ *
@@ -488,6 +679,7 @@ const server = createServer(async (req, res) => {
   try {
     if (!path.startsWith('/api/')) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'method_not_allowed');
+      if (path.startsWith('/uploads/')) return serveUpload(res, path);
       return serveStatic(req, res, path);
     }
 
@@ -505,12 +697,18 @@ const server = createServer(async (req, res) => {
 
       if (path === '/api/admin/orders' && req.method === 'GET') return adminOrders(res, url);
       if (path === '/api/admin/products' && req.method === 'GET') return adminProducts(res);
+      if (path === '/api/admin/products' && req.method === 'POST') return await adminCreateProduct(req, res);
 
       const orderMatch = path.match(/^\/api\/admin\/orders\/(\d+)$/);
       if (orderMatch && req.method === 'PATCH') return await adminUpdateOrder(req, res, Number(orderMatch[1]));
 
       const productMatch = path.match(/^\/api\/admin\/products\/(\d+)$/);
       if (productMatch && req.method === 'PATCH') return await adminUpdateProduct(req, res, Number(productMatch[1]));
+      if (productMatch && req.method === 'DELETE') return adminDeleteProduct(res, Number(productMatch[1]));
+
+      const imageMatch = path.match(/^\/api\/admin\/products\/(\d+)\/image$/);
+      if (imageMatch && req.method === 'POST') return await adminUploadImage(req, res, Number(imageMatch[1]));
+      if (imageMatch && req.method === 'DELETE') return adminDeleteImage(res, Number(imageMatch[1]));
     }
 
     return fail(res, 404, 'not_found');

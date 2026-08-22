@@ -6,8 +6,14 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#15803d">
   <meta name="page-title-key" content="admin.title">
-  <title>فضاء البائع — فلاّح</title>
+  <title>لوحة البائع — فلّاح</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="فلّاح">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -81,11 +87,18 @@
 
         <!-- Produits -->
         <div id="panel-products" role="tabpanel" aria-labelledby="tab-products" hidden>
+          <div class="catalog-bar">
+            <button type="button" class="btn" id="add-product">
+              <span data-icon="plus"></span>
+              <span data-i18n="p.add"></span>
+            </button>
+          </div>
+
           <div class="panel table-wrap">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.pName"></th>
+                  <th colspan="2" data-i18n="admin.pName"></th>
                   <th data-i18n="admin.pPrice"></th>
                   <th data-i18n="admin.pStock"></th>
                   <th data-i18n="admin.pAvailable"></th>
@@ -100,6 +113,145 @@
 
     </div>
   </main>
+
+  <!-- ------------------- Fiche produit (ajout / édition) ------------------- -->
+  <dialog id="product-dialog" class="dialog" aria-labelledby="dialog-title">
+    <form id="product-form" method="dialog" novalidate>
+      <header class="dialog__head">
+        <h2 id="dialog-title" data-i18n="p.new"></h2>
+        <button type="button" class="drawer__close" id="dialog-close" data-i18n-aria="p.cancel">
+          <span data-icon="x"></span>
+        </button>
+      </header>
+
+      <div class="dialog__body">
+        <fieldset class="form-section">
+          <legend data-i18n="p.secIdentity"></legend>
+          <div class="form-grid">
+            <div class="field" data-field="name">
+              <label class="field__label" for="p-name">
+                <span data-i18n="p.name"></span> <span class="req" aria-hidden="true">*</span>
+              </label>
+              <input type="text" id="p-name" name="name" maxlength="80" required dir="auto">
+              <span class="field__error" data-error-for="name"></span>
+            </div>
+            <div class="field" data-field="category">
+              <label class="field__label" for="p-category" data-i18n="p.category"></label>
+              <select id="p-category" name="category" required></select>
+              <span class="field__error" data-error-for="category"></span>
+            </div>
+            <div class="field" data-field="unit">
+              <label class="field__label" for="p-unit" data-i18n="p.unit"></label>
+              <select id="p-unit" name="unit" required></select>
+              <span class="field__error" data-error-for="unit"></span>
+            </div>
+            <div class="field">
+              <label class="field__label" for="p-description" data-i18n="p.description"></label>
+              <textarea id="p-description" name="description" maxlength="300" dir="auto"></textarea>
+            </div>
+          </div>
+
+          <div class="switch-row">
+            <label class="switch">
+              <input type="checkbox" id="p-bio" name="isBio">
+              <span data-i18n="p.bio"></span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="p-available" name="isAvailable" checked>
+              <span data-i18n="p.available"></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend data-i18n="p.secPricing"></legend>
+          <div class="form-grid">
+            <div class="field" data-field="price">
+              <label class="field__label" for="p-price" data-i18n="p.price"></label>
+              <input type="number" id="p-price" name="price" min="100" max="1000000" step="100" required
+                     aria-describedby="p-price-hint">
+              <span class="field__hint" id="p-price-hint" data-i18n="p.priceHint"></span>
+              <span class="field__error" data-error-for="price"></span>
+            </div>
+            <div class="field" data-field="stock">
+              <label class="field__label" for="p-stock" data-i18n="p.stock"></label>
+              <input type="number" id="p-stock" name="stock" min="0" max="100000" step="0.5" required>
+              <span class="field__error" data-error-for="stock"></span>
+            </div>
+            <div class="field" data-field="step">
+              <label class="field__label" for="p-step" data-i18n="p.step"></label>
+              <input type="number" id="p-step" name="step" min="0.1" max="50" step="0.1" required
+                     aria-describedby="p-step-hint">
+              <span class="field__hint" id="p-step-hint" data-i18n="p.stepHint"></span>
+              <span class="field__error" data-error-for="step"></span>
+            </div>
+            <div class="field" data-field="min">
+              <label class="field__label" for="p-min" data-i18n="p.min"></label>
+              <input type="number" id="p-min" name="min" min="0.1" max="100" step="0.1" required>
+              <span class="field__error" data-error-for="min"></span>
+            </div>
+            <div class="field" data-field="max">
+              <label class="field__label" for="p-max" data-i18n="p.max"></label>
+              <input type="number" id="p-max" name="max" min="0.5" max="1000" step="0.5" required>
+              <span class="field__error" data-error-for="max"></span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend data-i18n="p.secOrigin"></legend>
+          <div class="form-grid">
+            <div class="field">
+              <label class="field__label" for="p-farmer" data-i18n="p.farmer"></label>
+              <input type="text" id="p-farmer" name="farmer" maxlength="80" dir="auto">
+            </div>
+            <div class="field">
+              <label class="field__label" for="p-region" data-i18n="p.region"></label>
+              <input type="text" id="p-region" name="region" maxlength="80" dir="auto">
+            </div>
+            <div class="field">
+              <label class="field__label" for="p-harvested" data-i18n="p.harvested"></label>
+              <input type="text" id="p-harvested" name="harvested" maxlength="60" dir="auto"
+                     aria-describedby="p-harvested-hint">
+              <span class="field__hint" id="p-harvested-hint" data-i18n="p.harvestedHint"></span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend data-i18n="p.secMedia"></legend>
+
+          <div class="photo-row">
+            <div class="photo-preview" id="photo-preview"></div>
+            <div>
+              <label class="btn btn--ghost btn--sm" for="p-photo">
+                <span data-icon="package"></span>
+                <span data-i18n="p.photoChoose" id="photo-button-label"></span>
+              </label>
+              <input type="file" id="p-photo" name="photo" accept="image/jpeg,image/png,image/webp" hidden>
+              <button type="button" class="btn btn--danger btn--sm" id="photo-remove" hidden>
+                <span data-i18n="p.photoRemove"></span>
+              </button>
+              <p class="field__hint" data-i18n="p.photoHint"></p>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field__label" data-i18n="p.illustration"></span>
+            <div class="icon-picker" id="icon-picker" role="radiogroup" data-i18n-aria="p.illustration"></div>
+          </div>
+        </fieldset>
+      </div>
+
+      <footer class="dialog__foot">
+        <button type="button" class="btn btn--ghost" id="dialog-cancel" data-i18n="p.cancel"></button>
+        <button type="submit" class="btn" id="dialog-save">
+          <span data-icon="check"></span>
+          <span data-i18n="p.saveProduct"></span>
+        </button>
+      </footer>
+    </form>
+  </dialog>
 
   <script type="module" src="/js/admin.js"></script>
 </body>

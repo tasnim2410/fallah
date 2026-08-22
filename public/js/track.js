@@ -62,7 +62,7 @@ function renderOrder(order) {
       <ul class="order-items">
         ${order.items
           .map(
-            (i) => `<li><span>${esc(pick(i.name))} — ${esc(qtyLabel(i.qty, i.unit))}</span>
+            (i) => `<li><span>${esc(i.name)} — ${esc(qtyLabel(i.qty, i.unit))}</span>
                         <span>${esc(money(i.lineTotal))}</span></li>`
           )
           .join('')}

@@ -4,7 +4,11 @@ Boutique en ligne qui relie les clients directement aux agriculteurs : produits 
 cueillis du jour, commande en quelques clics, **confirmation par téléphone**, puis livraison
 et **paiement en espèces à la remise**.
 
-Site bilingue **arabe (RTL, par défaut)** / **français (LTR)**, bascule instantanée depuis l'en-tête.
+Interface bilingue **arabe (RTL, par défaut)** / **français (LTR)**, bascule instantanée depuis
+l'en-tête — boutons, libellés, catégories, unités, statuts, etc. **Les fiches produit, elles,
+sont dans une seule langue** (celle saisie par le vendeur) : nom, description, producteur,
+région et période de récolte s'affichent tels quels, quelle que soit la langue choisie par le
+client. Voir *Ajouter un produit* ci-dessous.
 
 ---
 
@@ -28,7 +32,37 @@ Le client peut suivre l'état de sa commande sur `/track.html` avec son numéro 
 - téléphone du client cliquable (`tel:`) pour l'appel de confirmation ;
 - avancement en un clic : *en attente → confirmée → en préparation → en route → livrée* ;
 - annulation (le stock est automatiquement restitué) ;
-- édition des **prix**, du **stock** et de la **mise en vente** de chaque produit.
+- **gestion du catalogue** : ajouter, modifier et supprimer des produits, avec photo.
+
+### Ajouter un produit
+
+Onglet **Produits → Ajouter un produit**. La fiche demande :
+
+| Section | Champs |
+|---|---|
+| Identité | nom (obligatoire, une seule langue), description, catégorie, unité de vente, bio, mise en vente |
+| Prix et quantités | prix en millimes, stock, pas de quantité, minimum et maximum par commande |
+| Provenance | producteur, région, période de récolte |
+| Visuel | photo JPG/PNG/WebP (< 4 Mo) **ou** une illustration au choix |
+
+Un seul champ texte par information — pas de doublon arabe/français — puisque chaque produit
+n'a qu'une langue. Les champs libres acceptent l'arabe ou le français indifféremment
+(`dir="auto"` : la direction du texte s'ajuste automatiquement à la première lettre saisie).
+
+Le produit apparaît immédiatement dans la boutique. L'identifiant d'URL (*slug*) est fabriqué
+automatiquement à partir du nom et rendu unique si besoin ; un nom saisi en arabe (l'alphabet
+latin n'étant pas utilisé) retombe sur un slug générique (`produit`, `produit-2`…) — sans
+conséquence pour le client, l'URL n'est jamais affichée.
+
+Le tableau permet aussi l'édition rapide du prix, du stock et de la mise en vente sans
+ouvrir la fiche complète — pratique quand les prix bougent au jour le jour.
+
+**Supprimer un produit** le retire de la boutique ; les commandes déjà passées gardent
+leur propre copie du nom, de l'unité et du prix payé, donc l'historique reste intact.
+
+Les photos sont enregistrées dans `data/uploads/` et servies sous `/uploads/…`. Le format
+réel est vérifié à partir des premiers octets du fichier : renommer un `.exe` en `.jpg`
+ne passe pas.
 
 ---
 
@@ -85,6 +119,8 @@ fallah_web/
 │   ├── checkout.html Formulaire de commande + confirmation
 │   ├── track.html    Suivi d'une commande
 │   ├── admin.html    Espace vendeur
+│   ├── 404.html · offline.html
+│   ├── manifest.webmanifest · sw.js · icons/   PWA (installation + hors ligne)
 │   ├── css/style.css Design system (vert terre + or de récolte, RTL/LTR)
 │   └── js/
 │       ├── i18n.js   Dictionnaire ar/fr, formats prix, dates, quantités
@@ -93,6 +129,30 @@ fallah_web/
 │       ├── shop.js · checkout.js · track.js · admin.js
 └── data/fallah.db    Base SQLite (créée au premier démarrage, ignorée par git)
 ```
+
+## Application installable (PWA)
+
+La boutique s'installe sur téléphone (« Ajouter à l'écran d'accueil ») et garde une icône,
+un écran de démarrage et un affichage plein écran, sans passer par un store.
+
+- `public/manifest.webmanifest` — nom, couleurs, icônes, raccourcis (*Suivi*, *Espace vendeur*).
+- `public/sw.js` — service worker. Bumpez `VERSION` à chaque déploiement pour purger les
+  anciens caches.
+- `public/offline.html` — page affichée quand le réseau manque et que la page demandée
+  n'a jamais été visitée.
+
+Ce qui fonctionne hors connexion : les pages déjà visitées et le **dernier catalogue chargé**.
+Ce qui exige une connexion : passer commande, suivre une commande, l'espace vendeur — ces
+requêtes ne sont **jamais** mises en cache (données personnelles et jeton de session).
+
+> ⚠️ Un service worker exige **HTTPS** (ou `localhost`). En HTTP simple sur un vrai domaine,
+> l'installation et le mode hors ligne ne s'activeront pas.
+
+Pour vérifier dans Chrome : *DevTools → Application → Service Workers* (état du worker),
+*Manifest* (installabilité), et la case *Offline* pour simuler la coupure réseau.
+
+Les icônes de `public/icons/` sont générées à partir du logo ; pour les changer, remplacez
+simplement les PNG en gardant les mêmes noms et dimensions (192×192, 512×512, 512×512 maskable).
 
 ## API
 
@@ -105,7 +165,11 @@ fallah_web/
 | `POST` | `/api/admin/login` | `{ password }` → jeton de session (8 h) |
 | `GET` | `/api/admin/orders` | Commandes + compteurs (en-tête `X-Admin-Token`) |
 | `PATCH` | `/api/admin/orders/:id` | Changer le statut / la note interne |
-| `GET` `PATCH` | `/api/admin/products[/:id]` | Prix, stock, mise en vente |
+| `GET` | `/api/admin/products` | Catalogue complet + listes (unités, catégories, illustrations) |
+| `POST` | `/api/admin/products` | Créer un produit |
+| `PATCH` | `/api/admin/products/:id` | Modifier (complet ou partiel : prix/stock seuls) |
+| `DELETE` | `/api/admin/products/:id` | Supprimer un produit |
+| `POST` `DELETE` | `/api/admin/products/:id/image` | Envoyer / retirer la photo (corps binaire brut) |
 
 **Règle de sécurité appliquée partout : les prix, les stocks, les pas de vente et les totaux
 sont recalculés côté serveur depuis la base.** Rien de ce que le navigateur envoie sur les
@@ -119,10 +183,10 @@ limité par IP, et l'espace vendeur utilise une comparaison de mot de passe à t
 
 | Quoi | Où |
 |---|---|
-| Produits, prix, producteurs, régions | `server/seed.js`, puis `npm run seed` — ou directement depuis `/admin.html` |
+| Produits, prix, producteurs, régions | **Depuis `/admin.html`** (onglet Produits) — ou `server/seed.js` puis `npm run seed` pour le catalogue de départ |
 | Frais de livraison, seuil de gratuité | `SHOP` dans `server/db.js` (`5.000 DT`, offerte dès `60.000 DT`) |
 | Gouvernorats livrés | `GOVERNORATES` dans `server/validate.js` |
-| Textes arabes et français | `public/js/i18n.js` |
+| Textes arabes et français | `public/js/i18n.js` — l'arabe est en **arabe standard moderne (فصحى)**, pas en dialecte : gardez ce registre en ajoutant des clés |
 | Couleurs, arrondis, ombres | variables `:root` en haut de `public/css/style.css` |
 | Illustrations produits | `PRODUCE` dans `public/js/icons.js` (champ `icon` du produit) |
 
@@ -141,8 +205,9 @@ installer, et le serveur écoute déjà sur la variable `PORT` fournie par la pl
 Deux réglages sont indispensables :
 
 1. **Un volume persistant monté sur `/app/data`.**
-   Sans volume, le disque est éphémère : la base SQLite — donc toutes les commandes — est
-   effacée à chaque redéploiement ou redémarrage.
+   Sans volume, le disque est éphémère : la base SQLite *et les photos produits*
+   (`data/uploads/`) — donc toutes les commandes et tous les visuels — sont effacées à
+   chaque redéploiement ou redémarrage.
 2. **Les variables d'environnement** dans l'onglet *Variables* :
 
    ```ini

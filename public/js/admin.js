@@ -1,7 +1,7 @@
 /** Espace vendeur : connexion, suivi des commandes, prix et stock. */
 
 import { t, pick, money, qtyLabel, dateLabel, onLangChange } from './i18n.js';
-import { icon } from './icons.js';
+import { icon, produceIcon } from './icons.js';
 import { initShell, api, getConfig, toast, esc } from './app.js';
 
 const TOKEN_KEY = 'fallah.adminToken';
@@ -28,6 +28,10 @@ let token = null;
 let config = null;
 let orders = [];
 let products = [];
+/** Listes de référence renvoyées par l'API avec le catalogue. */
+let productUnits = ['kg'];
+let productCategories = ['vegetables'];
+let productIcons = ['leaf'];
 let counts = {};
 let revenue = 0;
 let activeStatus = 'pending';
@@ -154,7 +158,7 @@ function orderCard(order) {
       <ul class="order-items">
         ${order.items
           .map(
-            (i) => `<li><span>${esc(pick(i.name))} — ${esc(qtyLabel(i.qty, i.unit))}</span>
+            (i) => `<li><span>${esc(i.name)} — ${esc(qtyLabel(i.qty, i.unit))}</span>
                         <span>${esc(money(i.lineTotal))}</span></li>`
           )
           .join('')}
@@ -234,14 +238,29 @@ document.getElementById('refresh').addEventListener('click', () => loadOrders())
 
 /* ---------------------------- Produits --------------------------- */
 
+/** Vignette : la photo si elle existe, sinon l'illustration. */
+const productThumb = (p) =>
+  `<div class="product-thumb">${
+    p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : produceIcon(p.icon)
+  }</div>`;
+
 function renderProducts() {
+  if (!products.length) {
+    productsBody.innerHTML = `<tr><td colspan="6"><div class="empty-state">${icon('package')}
+      <p>${esc(t('p.empty'))}</p></div></td></tr>`;
+    return;
+  }
+
   productsBody.innerHTML = products
     .map(
       (p) => `
       <tr data-product="${p.id}">
+        <td>${productThumb(p)}</td>
         <td>
-          <strong>${esc(pick(p.name))}</strong><br>
-          <small class="muted">${esc(t(`unit.${p.unit}`))} · ${esc(pick(p.farmer))}</small>
+          <strong>${esc(p.name)}</strong><br>
+          <small class="muted">${esc(t(`unit.${p.unit}`))} · ${esc(t(`cat.${p.category}`))}${
+            p.farmer ? ` · ${esc(p.farmer)}` : ''
+          }</small>
         </td>
         <td><input type="number" data-price value="${p.price}" min="100" max="1000000" step="100"
                    aria-label="${esc(t('admin.pPrice'))}"></td>
@@ -253,17 +272,40 @@ function renderProducts() {
             <span class="visually-hidden">${esc(t('admin.pAvailable'))}</span>
           </label>
         </td>
-        <td><button type="button" class="btn btn--sm btn--ghost" data-save>${esc(t('admin.save'))}</button></td>
+        <td>
+          <div class="row-actions">
+            <button type="button" class="btn btn--sm btn--ghost" data-save>${esc(t('admin.save'))}</button>
+            <button type="button" class="btn btn--sm btn--ghost" data-edit>${esc(t('p.edit'))}</button>
+            <button type="button" class="btn btn--sm btn--danger" data-delete>${esc(t('p.delete'))}</button>
+          </div>
+        </td>
       </tr>`
     )
     .join('');
 }
 
 productsBody.addEventListener('click', async (event) => {
-  if (!event.target.closest('[data-save]')) return;
   const row = event.target.closest('[data-product]');
+  if (!row) return;
   const id = Number(row.dataset.product);
+  const product = products.find((p) => p.id === id);
 
+  if (event.target.closest('[data-edit]')) return openProductDialog(product);
+
+  if (event.target.closest('[data-delete]')) {
+    if (!confirm(t('p.deleteConfirm', { name: product.name }))) return;
+    const res = await api(`/api/admin/products/${id}`, { method: 'DELETE', token });
+    if (res.status === 401) return requireLogin();
+    if (!res.ok) return toast(t(`err.${res.data?.error || 'network'}`), 'error');
+    products = products.filter((p) => p.id !== id);
+    renderProducts();
+    toast(t('p.deleted'));
+    return;
+  }
+
+  if (!event.target.closest('[data-save]')) return;
+
+  // Édition rapide : uniquement le prix, le stock et la mise en vente.
   const res = await api(`/api/admin/products/${id}`, {
     method: 'PATCH',
     token,
@@ -280,6 +322,198 @@ productsBody.addEventListener('click', async (event) => {
   const index = products.findIndex((p) => p.id === id);
   if (index >= 0) products[index] = res.data.product;
   toast(t('admin.saved'));
+});
+
+/* ------------------- Fiche produit (ajout / édition) ------------------- */
+
+const dialog = document.getElementById('product-dialog');
+const productForm = document.getElementById('product-form');
+const photoInput = document.getElementById('p-photo');
+const photoPreview = document.getElementById('photo-preview');
+const photoRemoveBtn = document.getElementById('photo-remove');
+const iconPicker = document.getElementById('icon-picker');
+
+/** Produit en cours d'édition (null = création). */
+let editing = null;
+/** Fichier choisi mais pas encore envoyé. */
+let pendingPhoto = null;
+/** Le vendeur a demandé la suppression de la photo existante. */
+let photoCleared = false;
+let chosenIcon = 'leaf';
+
+function fillSelect(id, values, labelKey) {
+  const select = document.getElementById(id);
+  select.innerHTML = values
+    .map((v) => `<option value="${esc(v)}">${esc(t(`${labelKey}.${v}`))}</option>`)
+    .join('');
+}
+
+function renderIconPicker() {
+  iconPicker.innerHTML = productIcons
+    .map(
+      (name) => `<button type="button" role="radio" data-icon-choice="${esc(name)}"
+        aria-checked="${name === chosenIcon}" title="${esc(name)}">${produceIcon(name)}</button>`
+    )
+    .join('');
+}
+
+iconPicker.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-icon-choice]');
+  if (!button) return;
+  chosenIcon = button.dataset.iconChoice;
+  renderIconPicker();
+  if (!pendingPhoto && (photoCleared || !editing?.image)) renderPhotoPreview();
+});
+
+function renderPhotoPreview() {
+  let media = produceIcon(chosenIcon);
+  if (pendingPhoto) media = `<img src="${URL.createObjectURL(pendingPhoto)}" alt="">`;
+  else if (editing?.image && !photoCleared) media = `<img src="${esc(editing.image)}" alt="">`;
+
+  photoPreview.innerHTML = media;
+  const hasPhoto = Boolean(pendingPhoto || (editing?.image && !photoCleared));
+  photoRemoveBtn.hidden = !hasPhoto;
+  document.getElementById('photo-button-label').textContent = t(hasPhoto ? 'p.photoChange' : 'p.photoChoose');
+}
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files?.[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) {
+    toast(t('err.image_too_large'), 'error');
+    photoInput.value = '';
+    return;
+  }
+  pendingPhoto = file;
+  photoCleared = false;
+  renderPhotoPreview();
+});
+
+photoRemoveBtn.addEventListener('click', () => {
+  pendingPhoto = null;
+  photoInput.value = '';
+  photoCleared = true;
+  renderPhotoPreview();
+});
+
+/** Ouvre la fiche, vide pour un ajout ou pré-remplie pour une modification. */
+function openProductDialog(product = null) {
+  editing = product;
+  pendingPhoto = null;
+  photoCleared = false;
+  chosenIcon = product?.icon || 'leaf';
+
+  fillSelect('p-category', productCategories, 'cat');
+  fillSelect('p-unit', productUnits, 'unit');
+  renderIconPicker();
+  clearProductErrors();
+
+  document.getElementById('dialog-title').textContent = t(product ? 'p.edit' : 'p.new');
+  const f = productForm.elements;
+  f.name.value = product?.name || '';
+  f.description.value = product?.description || '';
+  f.category.value = product?.category || productCategories[0];
+  f.unit.value = product?.unit || 'kg';
+  f.price.value = product?.price ?? 2000;
+  f.stock.value = product?.stock ?? 50;
+  f.step.value = product?.step ?? 0.5;
+  f.min.value = product?.min ?? 1;
+  f.max.value = product?.max ?? 20;
+  f.farmer.value = product?.farmer || '';
+  f.region.value = product?.region || '';
+  f.harvested.value = product?.harvested || '';
+  f.isBio.checked = Boolean(product?.isBio);
+  f.isAvailable.checked = product ? Boolean(product.isAvailable) : true;
+
+  renderPhotoPreview();
+  dialog.showModal();
+  f.name.focus();
+}
+
+function clearProductErrors() {
+  for (const wrapper of productForm.querySelectorAll('.has-error')) {
+    wrapper.classList.remove('has-error');
+    wrapper.querySelector('[data-error-for]').textContent = '';
+  }
+}
+
+document.getElementById('add-product').addEventListener('click', () => openProductDialog());
+document.getElementById('dialog-close').addEventListener('click', () => dialog.close());
+document.getElementById('dialog-cancel').addEventListener('click', () => dialog.close());
+
+/** Envoie la photo choisie sur le produit (déjà créé côté serveur). */
+async function uploadPhoto(productId) {
+  const res = await fetch(`/api/admin/products/${productId}/image`, {
+    method: 'POST',
+    headers: { 'Content-Type': pendingPhoto.type || 'application/octet-stream', 'X-Admin-Token': token },
+    body: pendingPhoto,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+productForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  clearProductErrors();
+
+  const data = new FormData(productForm);
+  const payload = {
+    name: data.get('name'), description: data.get('description'),
+    farmer: data.get('farmer'), region: data.get('region'), harvested: data.get('harvested'),
+    category: data.get('category'), unit: data.get('unit'), icon: chosenIcon,
+    price: Number(data.get('price')), stock: Number(data.get('stock')),
+    step: Number(data.get('step')), min: Number(data.get('min')), max: Number(data.get('max')),
+    isBio: productForm.elements.isBio.checked,
+    isAvailable: productForm.elements.isAvailable.checked,
+  };
+
+  const saveBtn = document.getElementById('dialog-save');
+  const label = saveBtn.querySelector('span:last-child');
+  saveBtn.disabled = true;
+  label.textContent = t('p.saving');
+
+  const res = editing
+    ? await api(`/api/admin/products/${editing.id}`, { method: 'PATCH', token, body: payload })
+    : await api('/api/admin/products', { method: 'POST', token, body: payload });
+
+  if (res.status === 401) { saveBtn.disabled = false; label.textContent = t('p.saveProduct'); return requireLogin(); }
+
+  if (!res.ok) {
+    saveBtn.disabled = false;
+    label.textContent = t('p.saveProduct');
+    const code = res.data?.error || 'network';
+    const wrapper = res.data?.field && productForm.querySelector(`[data-field="${res.data.field}"]`);
+    if (wrapper) {
+      wrapper.classList.add('has-error');
+      wrapper.querySelector('[data-error-for]').textContent = t(`err.${code}`);
+      wrapper.querySelector('input, select, textarea')?.focus();
+    }
+    toast(t(`err.${code}`), 'error');
+    return;
+  }
+
+  let saved = res.data.product;
+
+  if (pendingPhoto) {
+    label.textContent = t('p.photoUploading');
+    const upload = await uploadPhoto(saved.id);
+    if (upload.ok) saved = upload.data.product;
+    else toast(t(`err.${upload.data?.error || 'upload_failed'}`), 'error');
+  } else if (photoCleared && editing?.image) {
+    const cleared = await api(`/api/admin/products/${saved.id}/image`, { method: 'DELETE', token });
+    if (cleared.ok) saved = cleared.data.product;
+  }
+
+  saveBtn.disabled = false;
+  label.textContent = t('p.saveProduct');
+
+  const index = products.findIndex((p) => p.id === saved.id);
+  if (index >= 0) products[index] = saved;
+  else products.push(saved);
+
+  renderProducts();
+  dialog.close();
+  toast(t(editing ? 'p.updated' : 'p.created'));
 });
 
 /* ----------------------------- Onglets --------------------------- */
@@ -315,6 +549,9 @@ async function loadProducts() {
   if (res.status === 401) return requireLogin();
   if (!res.ok) return toast(t('err.network'), 'error');
   products = res.data.products;
+  productUnits = res.data.units || productUnits;
+  productCategories = res.data.categories || productCategories;
+  productIcons = res.data.icons || productIcons;
   renderProducts();
 }
 

@@ -70,6 +70,110 @@ export function validateCustomer(body) {
   };
 }
 
+const COMBINING_MARKS = new RegExp('[\\u0300-\\u036F]', 'g');
+
+/** Fabrique un identifiant d'URL à partir du nom français (ou arabe). */
+export function slugify(value, fallback = 'produit') {
+  const slug = String(value ?? '')
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')      // enlève les accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return slug || fallback;
+}
+
+const NUMERIC_FIELDS = {
+  price: { min: 100, max: 1_000_000 },        // 0,100 DT → 1000 DT
+  stock: { min: 0, max: 100_000 },
+  step: { min: 0.1, max: 50 },
+  min: { min: 0.1, max: 100 },
+  max: { min: 0.5, max: 1000 },
+};
+
+/**
+ * Valide la fiche produit saisie par le vendeur.
+ * @param {object} body données du formulaire
+ * @param {{units: string[], categories: string[], icons: string[], partial: boolean}} options
+ */
+export function validateProduct(body, { units, categories, icons, partial = false }) {
+  const value = {};
+  const text = (key, max, required) => {
+    if (body?.[key] === undefined) {
+      if (partial) return true;
+      if (!required) { value[key] = ''; return true; }
+    }
+    const cleaned = cleanText(body?.[key], max);
+    if (required && cleaned.length < 2) return false;
+    value[key] = cleaned;
+    return true;
+  };
+
+  if (!text('name', 80, true)) return { ok: false, field: 'name', code: 'name_required' };
+  text('description', 300, false);
+  text('farmer', 80, false);
+  text('region', 80, false);
+  text('harvested', 60, false);
+
+  if (body?.category !== undefined || !partial) {
+    if (!categories.includes(body?.category)) return { ok: false, field: 'category', code: 'category_invalid' };
+    value.category = body.category;
+  }
+  if (body?.unit !== undefined || !partial) {
+    if (!units.includes(body?.unit)) return { ok: false, field: 'unit', code: 'unit_invalid' };
+    value.unit = body.unit;
+  }
+  if (body?.icon !== undefined) {
+    if (!icons.includes(body.icon)) return { ok: false, field: 'icon', code: 'icon_invalid' };
+    value.icon = body.icon;
+  } else if (!partial) {
+    value.icon = 'leaf';
+  }
+
+  for (const [key, bounds] of Object.entries(NUMERIC_FIELDS)) {
+    if (body?.[key] === undefined) {
+      if (partial) continue;
+      return { ok: false, field: key, code: `${key}_invalid` };
+    }
+    const num = Number(body[key]);
+    if (!Number.isFinite(num) || num < bounds.min || num > bounds.max) {
+      return { ok: false, field: key, code: `${key}_invalid` };
+    }
+    value[key] = key === 'price' ? Math.round(num) : Math.round(num * 100) / 100;
+  }
+
+  // Une quantité minimale supérieure au maximum rendrait le produit incommandable.
+  if (value.min !== undefined && value.max !== undefined && value.min > value.max) {
+    return { ok: false, field: 'min', code: 'min_above_max' };
+  }
+
+  if (body?.isBio !== undefined) value.isBio = Number(Boolean(body.isBio));
+  if (body?.isAvailable !== undefined) value.isAvailable = Number(Boolean(body.isAvailable));
+
+  return { ok: true, value };
+}
+
+/** Signatures acceptées pour une photo produit. */
+const IMAGE_SIGNATURES = [
+  { ext: 'jpg', type: 'image/jpeg', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { ext: 'png', type: 'image/png', test: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+  {
+    ext: 'webp',
+    type: 'image/webp',
+    test: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  },
+];
+
+/**
+ * Identifie le format réel d'un fichier envoyé, d'après ses premiers octets —
+ * on ne fait pas confiance à l'en-tête Content-Type annoncé par le client.
+ */
+export function detectImage(buffer) {
+  if (!buffer || buffer.length < 12) return null;
+  return IMAGE_SIGNATURES.find((sig) => sig.test(buffer)) || null;
+}
+
 /**
  * Vérifie la forme du panier reçu. Les quantités sont contrôlées ensuite
  * produit par produit (pas, minimum, stock) au moment de la commande.

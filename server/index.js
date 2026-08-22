@@ -27,7 +27,10 @@ const PORT_IS_EXPLICIT = Boolean(process.env.PORT);
 const ADMIN_PASSWORD = process.env.FALLAH_ADMIN_PASSWORD || 'fallah2026';
 const SHOP_PHONE = process.env.FALLAH_SHOP_PHONE || '+21600000000';
 
-seedProducts();
+/* On ne seed qu'au tout premier démarrage (catalogue vide) : au-delà, un
+ * produit supprimé par le vendeur ne doit jamais réapparaître tout seul. */
+const { n: existingProductCount } = db.prepare('SELECT COUNT(*) AS n FROM products').get();
+if (existingProductCount === 0) seedProducts();
 
 /* ------------------------------------------------------------------ *
  * Utilitaires HTTP

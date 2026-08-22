@@ -17,7 +17,6 @@ export const DICT = {
     'nav.admin': 'لوحة البائع',
     'lang.switch': 'تغيير اللغة',
 
-    'hero.eyebrow': 'قُطف اليوم من مزارع تونسية',
     'hero.title': 'خضار وفواكه طازجة، من المزارع مباشرة إلى منزلك',
     'hero.lead': 'اختر المنتج، وحدّد الكمية بالكيلوغرام، ثم أدخل رقم هاتفك وعنوانك. نتّصل بك لتأكيد الطلب ثم نوصّله إليك — والدفع نقدًا عند الاستلام.',
     'hero.cta': 'اطلب الآن',
@@ -283,7 +282,6 @@ export const DICT = {
     'nav.admin': 'Espace vendeur',
     'lang.switch': 'Changer de langue',
 
-    'hero.eyebrow': 'Cueilli du jour dans des fermes tunisiennes',
     'hero.title': 'Fruits et légumes frais, directement du producteur',
     'hero.lead': "Choisissez vos produits, indiquez le nombre de kilos, laissez votre téléphone et votre adresse. On vous appelle pour confirmer, puis on livre — paiement en espèces à la livraison.",
     'hero.cta': 'Commander',

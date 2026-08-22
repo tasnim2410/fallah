@@ -11,7 +11,9 @@ const refInput = document.getElementById('reference');
 const phoneInput = document.getElementById('phone');
 
 /** Étapes visibles par le client (l'annulation est traitée à part). */
-const FLOW = ['pending', 'confirmed', 'preparing', 'on_the_way', 'delivered'];
+const FLOW = ['pending', 'confirmed', 'on_the_way', 'delivered'];
+/** "preparing" n'a pas de puce dédiée : on l'affiche comme "confirmed" en cours. */
+const FLOW_INDEX = { pending: 0, confirmed: 1, preparing: 1, on_the_way: 2, delivered: 3 };
 
 let config = null;
 let currentOrder = null;
@@ -25,7 +27,7 @@ function governorateLabel(key) {
 
 function renderOrder(order) {
   currentOrder = order;
-  const index = FLOW.indexOf(order.status);
+  const index = FLOW_INDEX[order.status] ?? 0;
 
   const timeline =
     order.status === 'cancelled'
@@ -33,9 +35,10 @@ function renderOrder(order) {
            <span>${esc(t('status.cancelled.desc'))}</span></li>`
       : FLOW.map((status, i) => {
           const state = i < index ? 'is-done' : i === index ? 'is-current' : '';
+          const desc = state === 'is-current' ? `<span>${esc(t(`status.${status}.desc`))}</span>` : '';
           return `<li class="${state}">
             <strong>${esc(t(`status.${status}`))}</strong>
-            <span>${esc(t(`status.${status}.desc`))}</span>
+            ${desc}
           </li>`;
         }).join('');
 

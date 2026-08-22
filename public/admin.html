@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#15803d">
+  <meta name="page-title-key" content="admin.title">
+  <title>فضاء البائع — فلاّح</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="brand" href="/">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 3C9 3 4 8 4 15c0 2 .6 4 1.6 5.4"/><path d="M4.5 20.5C9 13 14 9.5 19 8"/>
+          </svg>
+        </span>
+        <span>
+          <span data-i18n="admin.title"></span>
+          <small class="brand__tag" data-i18n="admin.subtitle"></small>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Navigation">
+        <div class="lang-switch" data-lang-switch></div>
+        <button type="button" class="btn btn--ghost btn--sm always-visible" id="logout" hidden>
+          <span data-icon="logout"></span>
+          <span data-i18n="admin.logout"></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="section">
+    <div class="container">
+
+      <!-- ---------------------------- Connexion --------------------- -->
+      <section id="login-view">
+        <form class="panel" id="login-form" style="max-width: 420px; margin-inline: auto" novalidate>
+          <h1 class="panel__title">
+            <span data-icon="lock"></span>
+            <span data-i18n="admin.title"></span>
+          </h1>
+          <div class="field" data-field="password">
+            <label class="field__label" for="password" data-i18n="admin.password"></label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+            <span class="field__error" data-error-for="password"></span>
+          </div>
+          <button type="submit" class="btn btn--block" data-i18n="admin.login"></button>
+        </form>
+      </section>
+
+      <!-- --------------------------- Tableau de bord ---------------- -->
+      <section id="dash-view" hidden>
+        <div class="stats" id="stats"></div>
+
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="tab-orders" aria-selected="true" data-tab="orders" data-i18n="admin.tabOrders"></button>
+          <button type="button" role="tab" id="tab-products" aria-selected="false" data-tab="products" data-i18n="admin.tabProducts"></button>
+        </div>
+
+        <!-- Commandes -->
+        <div id="panel-orders" role="tabpanel" aria-labelledby="tab-orders">
+          <div class="catalog-bar">
+            <div class="search-field">
+              <span data-icon="search"></span>
+              <label class="visually-hidden" for="order-search" data-i18n="admin.searchOrders"></label>
+              <input type="search" id="order-search" data-i18n-placeholder="admin.searchOrders" autocomplete="off">
+            </div>
+            <div class="chips" id="status-filters" role="group"></div>
+            <button type="button" class="btn btn--ghost btn--sm" id="refresh">
+              <span data-icon="refresh"></span>
+              <span data-i18n="admin.refresh"></span>
+            </button>
+          </div>
+          <div id="orders" aria-live="polite"></div>
+        </div>
+
+        <!-- Produits -->
+        <div id="panel-products" role="tabpanel" aria-labelledby="tab-products" hidden>
+          <div class="panel table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th data-i18n="admin.pName"></th>
+                  <th data-i18n="admin.pPrice"></th>
+                  <th data-i18n="admin.pStock"></th>
+                  <th data-i18n="admin.pAvailable"></th>
+                  <th><span class="visually-hidden" data-i18n="admin.save"></span></th>
+                </tr>
+              </thead>
+              <tbody id="products-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

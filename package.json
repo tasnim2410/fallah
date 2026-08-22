@@ -1,0 +1,22 @@
+{
+  "name": "fallah-web",
+  "version": "1.0.0",
+  "description": "Fallah - marketplace reliant les clients aux agriculteurs (produits frais de la ferme)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "seed": "node server/seed.js --reset"
+  },
+  "keywords": [
+    "farm",
+    "marketplace",
+    "tunisia",
+    "fresh-produce"
+  ],
+  "license": "MIT"
+}

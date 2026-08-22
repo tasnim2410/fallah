@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#15803d">
+  <meta name="page-title-key" content="checkout.title">
+  <title>إتمام الطلبية — فلاّح</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main" data-i18n="checkout.title"></a>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="brand" href="/">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 3C9 3 4 8 4 15c0 2 .6 4 1.6 5.4"/><path d="M4.5 20.5C9 13 14 9.5 19 8"/>
+          </svg>
+        </span>
+        <span>
+          <span data-i18n="brand.name"></span>
+          <small class="brand__tag" data-i18n="brand.tag"></small>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Navigation">
+        <a href="/" data-i18n="checkout.back"></a>
+        <div class="lang-switch" data-lang-switch></div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="section">
+    <div class="container">
+
+      <!-- ------------------- Formulaire de commande ------------------ -->
+      <div id="checkout-view">
+        <div style="margin-block-end: var(--space-5)">
+          <h1 data-i18n="checkout.title"></h1>
+          <p class="muted" data-i18n="checkout.sub"></p>
+        </div>
+
+        <div class="checkout-layout">
+          <form id="order-form" novalidate>
+            <div class="panel">
+              <h2 class="panel__title">
+                <span data-icon="user"></span>
+                <span data-i18n="form.name"></span>
+              </h2>
+
+              <div class="field" data-field="name">
+                <label class="field__label" for="name">
+                  <span data-i18n="form.name"></span> <span class="req" aria-hidden="true">*</span>
+                </label>
+                <input type="text" id="name" name="name" autocomplete="name"
+                       data-i18n-placeholder="form.namePh" required maxlength="80">
+                <span class="field__error" data-error-for="name"></span>
+              </div>
+
+              <div class="field" data-field="phone">
+                <label class="field__label" for="phone">
+                  <span data-i18n="form.phone"></span> <span class="req" aria-hidden="true">*</span>
+                </label>
+                <div class="phone-input">
+                  <span class="phone-input__prefix" dir="ltr">+216</span>
+                  <input type="tel" id="phone" name="phone" inputmode="numeric" autocomplete="tel-national"
+                         data-i18n-placeholder="form.phonePh" required maxlength="14"
+                         aria-describedby="phone-hint">
+                </div>
+                <span class="field__hint" id="phone-hint" data-i18n="form.phoneHint"></span>
+                <span class="field__error" data-error-for="phone"></span>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h2 class="panel__title">
+                <span data-icon="pin"></span>
+                <span data-i18n="form.address"></span>
+              </h2>
+
+              <div class="field" data-field="governorate">
+                <label class="field__label" for="governorate">
+                  <span data-i18n="form.gov"></span> <span class="req" aria-hidden="true">*</span>
+                </label>
+                <select id="governorate" name="governorate" required></select>
+                <span class="field__error" data-error-for="governorate"></span>
+              </div>
+
+              <div class="field" data-field="address">
+                <label class="field__label" for="address">
+                  <span data-i18n="form.address"></span> <span class="req" aria-hidden="true">*</span>
+                </label>
+                <textarea id="address" name="address" required maxlength="300"
+                          data-i18n-placeholder="form.addressPh" aria-describedby="address-hint"></textarea>
+                <span class="field__hint" id="address-hint" data-i18n="form.addressHint"></span>
+                <span class="field__error" data-error-for="address"></span>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h2 class="panel__title">
+                <span data-icon="phone"></span>
+                <span data-i18n="form.time"></span>
+              </h2>
+
+              <div class="field">
+                <div class="radio-row" role="radiogroup" data-i18n-aria="form.time">
+                  <label class="radio-card">
+                    <input type="radio" name="preferredTime" value="any" checked>
+                    <span data-i18n="form.timeAny"></span>
+                  </label>
+                  <label class="radio-card">
+                    <input type="radio" name="preferredTime" value="morning">
+                    <span data-i18n="form.timeMorning"></span>
+                  </label>
+                  <label class="radio-card">
+                    <input type="radio" name="preferredTime" value="afternoon">
+                    <span data-i18n="form.timeAfternoon"></span>
+                  </label>
+                  <label class="radio-card">
+                    <input type="radio" name="preferredTime" value="evening">
+                    <span data-i18n="form.timeEvening"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="note" data-i18n="form.note"></label>
+                <textarea id="note" name="note" maxlength="300" data-i18n-placeholder="form.notePh"></textarea>
+              </div>
+
+              <div class="notice notice--warn">
+                <span data-icon="banknote"></span>
+                <span data-i18n="checkout.payNotice"></span>
+              </div>
+            </div>
+          </form>
+
+          <!-- ---------------------- Récapitulatif ---------------------- -->
+          <aside class="checkout-layout__summary">
+            <div class="panel">
+              <h2 class="panel__title">
+                <span data-icon="package"></span>
+                <span data-i18n="checkout.summary"></span>
+              </h2>
+              <div id="summary-lines"></div>
+              <div class="totals" id="summary-totals"></div>
+
+              <div class="notice" style="margin-block-end: var(--space-4)">
+                <span data-icon="phone"></span>
+                <span data-i18n="checkout.callNotice"></span>
+              </div>
+
+              <button type="submit" form="order-form" class="btn btn--accent btn--block" id="submit-btn">
+                <span data-icon="check"></span>
+                <span data-i18n="form.submit"></span>
+              </button>
+              <p class="center" style="margin-block-start: var(--space-3)">
+                <a href="/" data-i18n="checkout.back"></a>
+              </p>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- ------------------------- Confirmation --------------------- -->
+      <div id="success-view" hidden>
+        <div class="panel" style="max-width: 640px; margin-inline: auto; text-align: center">
+          <div style="width:72px;height:72px;margin-inline:auto;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary);border-radius:999px">
+            <span data-icon="check"></span>
+          </div>
+          <h1 style="margin-block-start: var(--space-4)" data-i18n="success.title"></h1>
+          <p class="muted" id="success-body"></p>
+
+          <div class="ref-box" style="margin-block: var(--space-5)">
+            <span id="order-ref"></span>
+            <button type="button" class="btn btn--ghost btn--sm" id="copy-ref" data-i18n="success.copy"></button>
+          </div>
+
+          <h3 style="text-align: start" data-i18n="success.next"></h3>
+          <ol class="timeline" style="text-align: start; list-style: none">
+            <li class="is-current"><strong data-i18n="success.next1"></strong></li>
+            <li><strong data-i18n="success.next2"></strong></li>
+            <li><strong data-i18n="success.next3"></strong></li>
+          </ol>
+
+          <div class="notice notice--ok" style="text-align: start">
+            <span data-icon="phone"></span>
+            <span>
+              <span data-i18n="footer.contact"></span> :
+              <a data-shop-phone href="tel:" dir="ltr"></a>
+            </span>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);justify-content:center;margin-block-start:var(--space-5)">
+            <a class="btn" id="track-link" href="/track.html">
+              <span data-icon="truck"></span><span data-i18n="success.track"></span>
+            </a>
+            <a class="btn btn--ghost" href="/" data-i18n="success.more"></a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script type="module" src="/js/checkout.js"></script>
+</body>
+</html>

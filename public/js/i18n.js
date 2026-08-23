@@ -228,7 +228,7 @@ export const DICT = {
     'err.product_not_found': 'لم يعد هذا المنتج موجودًا.',
 
     'footer.about': 'فلّاح',
-    'footer.aboutText': 'منصّة تونسية تربط الزبائن مباشرة بالمزارعين. المنتج يُقطف ويُوصَّل في اليوم نفسه.',
+    'footer.aboutText': 'منصّة تونسية تربط الزبائن مباشرة بالمزارعين.',
     'footer.contact': 'اتّصل بنا',
     'footer.hours': 'يوميًا من الساعة 7:00 إلى الساعة 19:00',
     'footer.links': 'روابط',

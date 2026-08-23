@@ -9,7 +9,6 @@ export const DICT = {
   ar: {
     'dir': 'rtl',
     'brand.name': 'فلّاح',
-    'brand.tag': 'من المزرعة إلى باب منزلك',
     'nav.shop': 'المنتجات',
     'nav.how': 'كيفية الطلب',
     'nav.track': 'تتبّع طلبك',
@@ -274,7 +273,6 @@ export const DICT = {
   fr: {
     'dir': 'ltr',
     'brand.name': 'Fallah',
-    'brand.tag': 'De la ferme à votre porte',
     'nav.shop': 'Produits',
     'nav.how': 'Comment ça marche',
     'nav.track': 'Suivre ma commande',

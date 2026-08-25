@@ -64,6 +64,8 @@
         <div class="tabs" role="tablist">
           <button type="button" role="tab" id="tab-orders" aria-selected="true" data-tab="orders" data-i18n="admin.tabOrders"></button>
           <button type="button" role="tab" id="tab-products" aria-selected="false" data-tab="products" data-i18n="admin.tabProducts"></button>
+          <button type="button" role="tab" id="tab-promotions" aria-selected="false" data-tab="promotions" data-i18n="admin.tabPromotions"></button>
+          <button type="button" role="tab" id="tab-settings" aria-selected="false" data-tab="settings" data-i18n="admin.tabSettings"></button>
         </div>
 
         <!-- Commandes -->
@@ -106,6 +108,83 @@
               <tbody id="products-body"></tbody>
             </table>
           </div>
+        </div>
+
+        <!-- Offres -->
+        <div id="panel-promotions" role="tabpanel" aria-labelledby="tab-promotions" hidden>
+          <div class="catalog-bar">
+            <button type="button" class="btn" id="add-promotion">
+              <span data-icon="plus"></span>
+              <span data-i18n="promo.add"></span>
+            </button>
+          </div>
+
+          <div class="panel table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th data-i18n="promo.colTitle"></th>
+                  <th data-i18n="promo.colRule"></th>
+                  <th data-i18n="promo.colActive"></th>
+                  <th><span class="visually-hidden" data-i18n="admin.save"></span></th>
+                </tr>
+              </thead>
+              <tbody id="promotions-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Réglages -->
+        <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+          <form class="panel" id="settings-form" style="max-width: 560px" novalidate>
+            <h2 class="panel__title">
+              <span data-icon="truck"></span>
+              <span data-i18n="admin.secDelivery"></span>
+            </h2>
+            <div class="form-grid">
+              <div class="field" data-field="delivery">
+                <label class="field__label" for="s-delivery" data-i18n="admin.deliveryPrice"></label>
+                <input type="number" id="s-delivery" name="delivery" min="0" max="100000" step="100" required>
+                <span class="field__error" data-error-for="delivery"></span>
+              </div>
+              <div class="field" data-field="freeDeliveryFrom">
+                <label class="field__label" for="s-free-from" data-i18n="admin.freeDeliveryFrom"></label>
+                <input type="number" id="s-free-from" name="freeDeliveryFrom" min="0" max="1000000" step="1000" required>
+                <span class="field__error" data-error-for="freeDeliveryFrom"></span>
+              </div>
+            </div>
+
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" id="s-always-free" name="alwaysFree">
+                <span data-i18n="admin.alwaysFree"></span>
+              </label>
+            </div>
+            <h2 class="panel__title" style="margin-block-start: var(--space-5)">
+              <span data-icon="tag"></span>
+              <span data-i18n="admin.secAnnouncement"></span>
+            </h2>
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" id="s-announce-active" name="announcementActive">
+                <span data-i18n="admin.announceActive"></span>
+              </label>
+            </div>
+            <div class="field">
+              <label class="field__label" for="s-announce-title" data-i18n="admin.announceTitle"></label>
+              <input type="text" id="s-announce-title" name="announcementTitle" maxlength="80" dir="auto">
+            </div>
+            <div class="field">
+              <label class="field__label" for="s-announce-body" data-i18n="admin.announceBody"></label>
+              <textarea id="s-announce-body" name="announcementBody" maxlength="400" rows="3" dir="auto"
+                        data-i18n-placeholder="admin.announceBodyPh"></textarea>
+            </div>
+
+            <button type="submit" class="btn" id="settings-save">
+              <span data-icon="check"></span>
+              <span data-i18n="admin.save"></span>
+            </button>
+          </form>
         </div>
       </section>
 
@@ -246,6 +325,111 @@
         <button type="submit" class="btn" id="dialog-save">
           <span data-icon="check"></span>
           <span data-i18n="p.saveProduct"></span>
+        </button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ---------------------- Offre (ajout / édition) ---------------------- -->
+  <dialog id="promo-dialog" class="dialog" aria-labelledby="promo-dialog-title">
+    <form id="promo-form" method="dialog" novalidate>
+      <header class="dialog__head">
+        <h2 id="promo-dialog-title" data-i18n="promo.new"></h2>
+        <button type="button" class="drawer__close" id="promo-close" data-i18n-aria="p.cancel">
+          <span data-icon="x"></span>
+        </button>
+      </header>
+
+      <div class="dialog__body">
+        <div class="field" data-field="title">
+          <label class="field__label" for="promo-title">
+            <span data-i18n="promo.title"></span> <span class="req" aria-hidden="true">*</span>
+          </label>
+          <input type="text" id="promo-title" name="title" maxlength="120" required dir="auto"
+                 aria-describedby="promo-title-hint">
+          <span class="field__hint" id="promo-title-hint" data-i18n="promo.titleHint"></span>
+          <span class="field__error" data-error-for="title"></span>
+        </div>
+
+        <fieldset class="form-section">
+          <legend data-i18n="promo.secTrigger"></legend>
+          <div class="form-grid">
+            <div class="field" data-field="triggerType">
+              <label class="field__label" for="promo-trigger-type" data-i18n="promo.triggerType"></label>
+              <select id="promo-trigger-type" name="triggerType"></select>
+              <span class="field__error" data-error-for="triggerType"></span>
+            </div>
+            <div class="field" data-field="triggerProductId" data-when-trigger="product">
+              <label class="field__label" for="promo-trigger-product" data-i18n="promo.triggerProductLabel"></label>
+              <select id="promo-trigger-product" name="triggerProductId"></select>
+              <span class="field__error" data-error-for="triggerProductId"></span>
+            </div>
+            <div class="field" data-field="triggerQty" data-when-trigger="product">
+              <label class="field__label" for="promo-trigger-qty" data-i18n="promo.triggerQtyLabel"></label>
+              <input type="number" id="promo-trigger-qty" name="triggerQty" min="0.1" max="1000" step="0.5">
+              <span class="field__error" data-error-for="triggerQty"></span>
+            </div>
+            <div class="field" data-field="triggerAmount" data-when-trigger="subtotal">
+              <label class="field__label" for="promo-trigger-amount" data-i18n="promo.triggerAmountLabel"></label>
+              <input type="number" id="promo-trigger-amount" name="triggerAmount" min="0" max="1000000" step="1000">
+              <span class="field__error" data-error-for="triggerAmount"></span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend data-i18n="promo.secReward"></legend>
+          <div class="form-grid">
+            <div class="field" data-field="rewardType">
+              <label class="field__label" for="promo-reward-type" data-i18n="promo.rewardType"></label>
+              <select id="promo-reward-type" name="rewardType"></select>
+              <span class="field__error" data-error-for="rewardType"></span>
+            </div>
+            <div class="field" data-field="rewardScope" data-when-reward="percent amount">
+              <label class="field__label" for="promo-reward-scope" data-i18n="promo.rewardScope"></label>
+              <select id="promo-reward-scope" name="rewardScope"></select>
+              <span class="field__error" data-error-for="rewardScope"></span>
+            </div>
+            <div class="field" data-field="rewardProductId" data-when-scope="product">
+              <label class="field__label" for="promo-reward-product" data-i18n="promo.rewardProductLabel"></label>
+              <select id="promo-reward-product" name="rewardProductId"></select>
+              <span class="field__error" data-error-for="rewardProductId"></span>
+            </div>
+            <div class="field" data-field="rewardPercent" data-when-reward="percent">
+              <label class="field__label" for="promo-reward-percent" data-i18n="promo.rewardPercentLabel"></label>
+              <input type="number" id="promo-reward-percent" name="rewardPercent" min="1" max="100" step="1">
+              <span class="field__error" data-error-for="rewardPercent"></span>
+            </div>
+            <div class="field" data-field="rewardAmount" data-when-reward="amount">
+              <label class="field__label" for="promo-reward-amount" data-i18n="promo.rewardAmountLabel"></label>
+              <input type="number" id="promo-reward-amount" name="rewardAmount" min="100" max="1000000" step="100">
+              <span class="field__error" data-error-for="rewardAmount"></span>
+            </div>
+            <div class="field" data-field="rewardMaxQty" data-when-reward="percent" data-when-scope="product">
+              <label class="field__label" for="promo-reward-max" data-i18n="promo.rewardMaxQtyLabel"></label>
+              <input type="number" id="promo-reward-max" name="rewardMaxQty" min="0" max="1000" step="0.5"
+                     aria-describedby="promo-max-hint">
+              <span class="field__hint" id="promo-max-hint" data-i18n="promo.rewardMaxQtyHint"></span>
+              <span class="field__error" data-error-for="rewardMaxQty"></span>
+            </div>
+          </div>
+
+          <div class="switch-row">
+            <label class="switch">
+              <input type="checkbox" id="promo-active" name="active" checked>
+              <span data-i18n="promo.active"></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="notice" id="promo-preview" aria-live="polite"></div>
+      </div>
+
+      <footer class="dialog__foot">
+        <button type="button" class="btn btn--ghost" id="promo-cancel" data-i18n="p.cancel"></button>
+        <button type="submit" class="btn" id="promo-save">
+          <span data-icon="check"></span>
+          <span data-i18n="promo.save"></span>
         </button>
       </footer>
     </form>

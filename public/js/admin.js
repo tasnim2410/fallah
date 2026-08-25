@@ -2,7 +2,8 @@
 
 import { t, pick, money, qtyLabel, dateLabel, onLangChange } from './i18n.js';
 import { icon, produceIcon } from './icons.js';
-import { initShell, api, getConfig, toast, esc } from './app.js';
+import { initShell, api, getConfig, toast, esc, describePromotion } from './app.js';
+import { mapsLink } from './map.js';
 
 const TOKEN_KEY = 'fallah.adminToken';
 const STATUSES = ['pending', 'confirmed', 'preparing', 'on_the_way', 'delivered', 'cancelled'];
@@ -152,6 +153,11 @@ function orderCard(order) {
         <div class="order-card__field"><span>${esc(t('admin.time'))}</span>${esc(t(`form.time${order.preferredTime[0].toUpperCase()}${order.preferredTime.slice(1)}`))}</div>
         <div class="order-card__field"><span>${esc(t('admin.address'))}</span>
           ${esc(governorateLabel(order.governorate))} — ${esc(order.address)}</div>
+        ${order.lat != null
+          ? `<div class="order-card__field"><span>${esc(t('admin.pin'))}</span>
+               <a href="${esc(mapsLink(order.lat, order.lng))}" target="_blank" rel="noopener" dir="ltr">
+                 ${esc(order.lat.toFixed(5))}, ${esc(order.lng.toFixed(5))}</a></div>`
+          : ''}
         ${order.note ? `<div class="order-card__field"><span>${esc(t('admin.note'))}</span>${esc(order.note)}</div>` : ''}
       </div>
 
@@ -160,6 +166,12 @@ function orderCard(order) {
           .map(
             (i) => `<li><span>${esc(i.name)} — ${esc(qtyLabel(i.qty, i.unit))}</span>
                         <span>${esc(money(i.lineTotal))}</span></li>`
+          )
+          .join('')}
+        ${(order.discounts || [])
+          .map(
+            (d) => `<li class="is-discount"><span>${esc(d.title)}</span>
+                        <span>${d.freeDelivery ? esc(t('cart.deliveryFree')) : `−${esc(money(d.amount))}`}</span></li>`
           )
           .join('')}
         <li><span>${esc(t('cart.delivery'))}</span>
@@ -171,6 +183,11 @@ function orderCard(order) {
         <a class="btn btn--sm" href="tel:+216${esc(order.phone)}">
           ${icon('phone')}<span>${esc(t('admin.call'))}</span>
         </a>
+        ${order.lat != null
+          ? `<a class="btn btn--sm" href="${esc(mapsLink(order.lat, order.lng))}" target="_blank" rel="noopener">
+               ${icon('pin')}<span>${esc(t('admin.openMap'))}</span>
+             </a>`
+          : ''}
         ${next
           ? `<button type="button" class="btn btn--sm btn--accent" data-set-status="${next.status}">
                ${icon(next.icon)}<span>${esc(t(next.key))}</span>
@@ -516,6 +533,344 @@ productForm.addEventListener('submit', async (event) => {
   toast(t(editing ? 'p.updated' : 'p.created'));
 });
 
+/* ---------------------------- Réglages --------------------------- */
+
+const settingsForm = document.getElementById('settings-form');
+/** Réglages chargés depuis le serveur (null tant qu'ils ne le sont pas). */
+let settings = null;
+
+function renderSettings() {
+  if (!settings) return;
+  settingsForm.elements.delivery.value = settings.delivery;
+  settingsForm.elements.freeDeliveryFrom.value = settings.freeDeliveryFrom;
+  settingsForm.elements.alwaysFree.checked = Boolean(settings.alwaysFree);
+  settingsForm.elements.announcementActive.checked = Boolean(settings.announcementActive);
+  settingsForm.elements.announcementTitle.value = settings.announcementTitle || '';
+  settingsForm.elements.announcementBody.value = settings.announcementBody || '';
+  toggleSettingsFields();
+}
+
+/** Le prix et le seuil ne servent plus quand la livraison est toujours offerte. */
+function toggleSettingsFields() {
+  const alwaysFree = settingsForm.elements.alwaysFree.checked;
+  settingsForm.elements.delivery.disabled = alwaysFree;
+  settingsForm.elements.freeDeliveryFrom.disabled = alwaysFree;
+}
+
+settingsForm.addEventListener('input', () => {
+  toggleSettingsFields();
+});
+
+function clearSettingsErrors() {
+  for (const wrapper of settingsForm.querySelectorAll('.has-error')) {
+    wrapper.classList.remove('has-error');
+    wrapper.querySelector('[data-error-for]').textContent = '';
+  }
+}
+
+settingsForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  clearSettingsErrors();
+
+  const saveBtn = document.getElementById('settings-save');
+  const label = saveBtn.querySelector('span:last-child');
+  saveBtn.disabled = true;
+  label.textContent = t('p.saving');
+
+  const res = await api('/api/admin/settings', {
+    method: 'PATCH',
+    token,
+    body: {
+      delivery: Number(settingsForm.elements.delivery.value),
+      freeDeliveryFrom: Number(settingsForm.elements.freeDeliveryFrom.value),
+      alwaysFree: settingsForm.elements.alwaysFree.checked,
+      announcementActive: settingsForm.elements.announcementActive.checked,
+      announcementTitle: settingsForm.elements.announcementTitle.value,
+      announcementBody: settingsForm.elements.announcementBody.value,
+    },
+  });
+
+  saveBtn.disabled = false;
+  label.textContent = t('admin.save');
+
+  if (res.status === 401) return requireLogin();
+
+  if (!res.ok) {
+    const code = res.data?.error || 'network';
+    const wrapper = res.data?.field && settingsForm.querySelector(`[data-field="${res.data.field}"]`);
+    if (wrapper) {
+      wrapper.classList.add('has-error');
+      wrapper.querySelector('[data-error-for]').textContent = t(`err.${code}`);
+      wrapper.querySelector('input')?.focus();
+    }
+    return toast(t(`err.${code}`), 'error');
+  }
+
+  settings = res.data.settings;
+  // La boutique lit les mêmes valeurs : on garde l'affichage des commandes juste.
+  if (config) {
+    config.delivery = settings.delivery;
+    config.freeDeliveryFrom = settings.freeDeliveryFrom;
+    config.deliveryAlwaysFree = settings.alwaysFree;
+  }
+  renderSettings();
+  toast(t('admin.saved'));
+});
+
+async function loadSettings() {
+  const res = await api('/api/admin/settings', { token });
+  if (res.status === 401) return requireLogin();
+  if (!res.ok) return toast(t('err.network'), 'error');
+  settings = res.data.settings;
+  renderSettings();
+}
+
+/* ---------------------------- Offres ----------------------------- */
+
+const promoBody = document.getElementById('promotions-body');
+const promoDialog = document.getElementById('promo-dialog');
+const promoForm = document.getElementById('promo-form');
+const promoPreview = document.getElementById('promo-preview');
+
+let promotions = [];
+/** Listes de référence renvoyées avec les offres. */
+let promoTriggers = ['always'];
+let promoRewards = ['percent'];
+let promoScopes = ['product', 'cart'];
+/** Produits proposés dans les listes déroulantes de la fiche offre. */
+let promoProducts = [];
+/** Offre en cours d'édition (null = création). */
+let editingPromo = null;
+
+function renderPromotions() {
+  if (!promotions.length) {
+    promoBody.innerHTML = `<tr><td colspan="4"><div class="empty-state">${icon('tag')}
+      <p>${esc(t('promo.empty'))}</p></div></td></tr>`;
+    return;
+  }
+
+  promoBody.innerHTML = promotions
+    .map(
+      (promo) => `
+      <tr data-promo="${promo.id}">
+        <td><strong>${esc(promo.title)}</strong></td>
+        <td><small class="muted">${esc(describePromotion(promo))}</small></td>
+        <td>
+          <label class="switch">
+            <input type="checkbox" data-promo-active ${promo.active ? 'checked' : ''}>
+            <span class="visually-hidden">${esc(t('promo.colActive'))}</span>
+          </label>
+        </td>
+        <td>
+          <div class="row-actions">
+            <button type="button" class="btn btn--sm btn--ghost" data-promo-edit>${esc(t('p.edit'))}</button>
+            <button type="button" class="btn btn--sm btn--danger" data-promo-delete>${esc(t('p.delete'))}</button>
+          </div>
+        </td>
+      </tr>`
+    )
+    .join('');
+}
+
+promoBody.addEventListener('click', async (event) => {
+  const row = event.target.closest('[data-promo]');
+  if (!row) return;
+  const id = Number(row.dataset.promo);
+  const promo = promotions.find((x) => x.id === id);
+  if (!promo) return;
+
+  if (event.target.closest('[data-promo-edit]')) return openPromoDialog(promo);
+
+  if (event.target.closest('[data-promo-delete]')) {
+    if (!confirm(t('promo.deleteConfirm', { title: promo.title }))) return;
+    const res = await api(`/api/admin/promotions/${id}`, { method: 'DELETE', token });
+    if (res.status === 401) return requireLogin();
+    if (!res.ok) return toast(t(`err.${res.data?.error || 'network'}`), 'error');
+    promotions = promotions.filter((x) => x.id !== id);
+    renderPromotions();
+    toast(t('promo.deleted'));
+  }
+});
+
+// Bascule active/inactive directement depuis la liste.
+promoBody.addEventListener('change', async (event) => {
+  const toggle = event.target.closest('[data-promo-active]');
+  if (!toggle) return;
+  const id = Number(toggle.closest('[data-promo]').dataset.promo);
+
+  const res = await api(`/api/admin/promotions/${id}`, {
+    method: 'PATCH', token, body: { active: toggle.checked },
+  });
+  if (res.status === 401) return requireLogin();
+  if (!res.ok) {
+    toggle.checked = !toggle.checked;
+    return toast(t(`err.${res.data?.error || 'network'}`), 'error');
+  }
+
+  const index = promotions.findIndex((x) => x.id === id);
+  if (index >= 0) promotions[index] = res.data.promotion;
+  toast(t('admin.saved'));
+});
+
+/** Remplit une liste déroulante de produits. */
+function fillProductSelect(id, selected) {
+  const select = document.getElementById(id);
+  select.innerHTML = promoProducts
+    .map((p) => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`)
+    .join('');
+}
+
+/** N'affiche que les champs utiles au couple déclencheur / récompense choisi. */
+function togglePromoFields() {
+  const trigger = promoForm.elements.triggerType.value;
+  const reward = promoForm.elements.rewardType.value;
+  // La livraison offerte ne vise aucun produit : la portée n'a plus de sens.
+  const scope = reward === 'free_delivery' ? '' : promoForm.elements.rewardScope.value;
+
+  for (const field of promoForm.querySelectorAll('[data-when-trigger], [data-when-reward], [data-when-scope]')) {
+    const wantsTrigger = field.dataset.whenTrigger;
+    const wantsReward = field.dataset.whenReward;
+    const wantsScope = field.dataset.whenScope;
+    const visible =
+      (!wantsTrigger || wantsTrigger.split(' ').includes(trigger)) &&
+      (!wantsReward || wantsReward.split(' ').includes(reward)) &&
+      (!wantsScope || wantsScope.split(' ').includes(scope));
+    field.hidden = !visible;
+  }
+  renderPromoPreview();
+}
+
+/** Phrase que verra le client, mise à jour à chaque frappe. */
+function renderPromoPreview() {
+  promoPreview.innerHTML = `${icon('tag')}<span>${esc(describePromotion(promoFromForm()))}</span>`;
+}
+
+/** Lit le formulaire sous la forme attendue par l'API et par describePromotion. */
+function promoFromForm() {
+  const f = promoForm.elements;
+  const triggerProductId = Number(f.triggerProductId.value) || null;
+  const rewardProductId = Number(f.rewardProductId.value) || null;
+  const find = (id) => promoProducts.find((p) => p.id === id) || null;
+
+  return {
+    title: f.title.value.trim(),
+    active: f.active.checked,
+    triggerType: f.triggerType.value,
+    triggerProductId,
+    triggerQty: Number(f.triggerQty.value) || 0,
+    triggerAmount: Number(f.triggerAmount.value) || 0,
+    rewardType: f.rewardType.value,
+    rewardScope: f.rewardScope.value,
+    rewardProductId,
+    rewardPercent: Number(f.rewardPercent.value) || 0,
+    rewardAmount: Number(f.rewardAmount.value) || 0,
+    rewardMaxQty: Number(f.rewardMaxQty.value) || 0,
+    triggerProduct: find(triggerProductId),
+    rewardProduct: find(rewardProductId),
+  };
+}
+
+function fillPromoSelect(id, values, labelKey, selected) {
+  const select = document.getElementById(id);
+  select.innerHTML = values
+    .map((v) => `<option value="${esc(v)}" ${v === selected ? 'selected' : ''}>${esc(t(`${labelKey}.${v}`))}</option>`)
+    .join('');
+}
+
+function openPromoDialog(promo = null) {
+  editingPromo = promo;
+  clearPromoErrors();
+
+  fillPromoSelect('promo-trigger-type', promoTriggers, 'promo.trigger', promo?.triggerType || 'always');
+  fillPromoSelect('promo-reward-type', promoRewards, 'promo.reward', promo?.rewardType || 'percent');
+  fillPromoSelect('promo-reward-scope', promoScopes, 'promo.scope', promo?.rewardScope || 'product');
+  fillProductSelect('promo-trigger-product', promo?.triggerProductId ?? promoProducts[0]?.id);
+  fillProductSelect('promo-reward-product', promo?.rewardProductId ?? promoProducts[0]?.id);
+
+  document.getElementById('promo-dialog-title').textContent = t(promo ? 'promo.edit' : 'promo.new');
+  const f = promoForm.elements;
+  f.title.value = promo?.title || '';
+  f.triggerQty.value = promo?.triggerQty || 1;
+  f.triggerAmount.value = promo?.triggerAmount ?? 50000;
+  f.rewardPercent.value = promo?.rewardPercent || 10;
+  f.rewardAmount.value = promo?.rewardAmount || 1000;
+  f.rewardMaxQty.value = promo?.rewardMaxQty || 0;
+  f.active.checked = promo ? Boolean(promo.active) : true;
+
+  togglePromoFields();
+  promoDialog.showModal();
+  f.title.focus();
+}
+
+function clearPromoErrors() {
+  for (const wrapper of promoForm.querySelectorAll('.has-error')) {
+    wrapper.classList.remove('has-error');
+    wrapper.querySelector('[data-error-for]').textContent = '';
+  }
+}
+
+promoForm.addEventListener('input', togglePromoFields);
+promoForm.addEventListener('change', togglePromoFields);
+document.getElementById('add-promotion').addEventListener('click', () => {
+  if (!promoProducts.length) return toast(t('promo.needProducts'), 'error');
+  openPromoDialog();
+});
+document.getElementById('promo-close').addEventListener('click', () => promoDialog.close());
+document.getElementById('promo-cancel').addEventListener('click', () => promoDialog.close());
+
+promoForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  clearPromoErrors();
+
+  const saveBtn = document.getElementById('promo-save');
+  const label = saveBtn.querySelector('span:last-child');
+  saveBtn.disabled = true;
+  label.textContent = t('p.saving');
+
+  const { triggerProduct, rewardProduct, ...payload } = promoFromForm();
+  const res = editingPromo
+    ? await api(`/api/admin/promotions/${editingPromo.id}`, { method: 'PATCH', token, body: payload })
+    : await api('/api/admin/promotions', { method: 'POST', token, body: payload });
+
+  saveBtn.disabled = false;
+  label.textContent = t('promo.save');
+
+  if (res.status === 401) return requireLogin();
+
+  if (!res.ok) {
+    const code = res.data?.error || 'network';
+    const wrapper = res.data?.field && promoForm.querySelector(`[data-field="${res.data.field}"]`);
+    if (wrapper) {
+      wrapper.classList.add('has-error');
+      wrapper.querySelector('[data-error-for]').textContent = t(`err.${code}`);
+      wrapper.querySelector('input, select')?.focus();
+    }
+    return toast(t(`err.${code}`), 'error');
+  }
+
+  const saved = res.data.promotion;
+  const index = promotions.findIndex((x) => x.id === saved.id);
+  if (index >= 0) promotions[index] = saved;
+  else promotions.push(saved);
+
+  renderPromotions();
+  promoDialog.close();
+  toast(t(editingPromo ? 'promo.updated' : 'promo.created'));
+});
+
+async function loadPromotions() {
+  const res = await api('/api/admin/promotions', { token });
+  if (res.status === 401) return requireLogin();
+  if (!res.ok) return toast(t('err.network'), 'error');
+
+  promotions = res.data.promotions;
+  promoTriggers = res.data.triggers || promoTriggers;
+  promoRewards = res.data.rewards || promoRewards;
+  promoScopes = res.data.scopes || promoScopes;
+  promoProducts = res.data.products || [];
+  renderPromotions();
+}
+
 /* ----------------------------- Onglets --------------------------- */
 
 for (const tab of document.querySelectorAll('[data-tab]')) {
@@ -526,6 +881,8 @@ for (const tab of document.querySelectorAll('[data-tab]')) {
       document.getElementById(`panel-${other.dataset.tab}`).hidden = !selected;
     }
     if (tab.dataset.tab === 'products') loadProducts();
+    if (tab.dataset.tab === 'promotions') loadPromotions();
+    if (tab.dataset.tab === 'settings') loadSettings();
   });
 }
 
@@ -569,6 +926,8 @@ onLangChange(() => {
   renderFilters();
   renderOrders();
   if (products.length) renderProducts();
+  if (promotions.length) renderPromotions();
+  if (settings) renderSettings();
 });
 
 if (token) enterDashboard();

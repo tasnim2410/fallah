@@ -15,7 +15,7 @@
  * Bump `VERSION` à chaque déploiement pour purger les anciens caches.
  */
 
-const VERSION = 'v2';
+const VERSION = 'v4';
 const SHELL_CACHE = `fallah-shell-${VERSION}`;
 const DATA_CACHE = `fallah-data-${VERSION}`;
 
@@ -36,6 +36,9 @@ const SHELL = [
   '/js/checkout.js',
   '/js/track.js',
   '/js/admin.js',
+  '/js/map.js',
+  '/js/promo.js',
+  '/js/totals.js',
   '/favicon.svg',
   '/manifest.webmanifest',
   '/icons/icon-192.png',

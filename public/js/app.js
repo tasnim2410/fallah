@@ -1,7 +1,8 @@
 /** Socle commun : appels API, panier, toasts, en-tête, animations. */
 
-import { t, lang, applyTranslations, setLang, onLangChange, money } from './i18n.js';
+import { t, lang, applyTranslations, setLang, onLangChange, money, qtyLabel } from './i18n.js';
 import { icon, produceIcon } from './icons.js';
+import { computeDiscounts, resolveDelivery } from './promo.js';
 
 /* ------------------------------ API ------------------------------ */
 
@@ -133,10 +134,91 @@ export const cartCount = () => getCart().length;
 export const cartSubtotal = () =>
   getCart().reduce((sum, i) => sum + Math.round(i.price * i.qty), 0);
 
-/** Frais de livraison selon la configuration boutique. */
-export function deliveryFee(subtotal, config) {
+/**
+ * Frais de livraison selon la configuration boutique, qu'une promotion
+ * « livraison offerte » peut annuler.
+ */
+export function deliveryFee(subtotal, config, freeDelivery = false) {
   if (!config) return 0;
-  return subtotal >= config.freeDeliveryFrom ? 0 : config.delivery;
+  return resolveDelivery(subtotal, {
+    alwaysFree: config.deliveryAlwaysFree,
+    freeDeliveryFrom: config.freeDeliveryFrom,
+    delivery: config.delivery,
+  }, freeDelivery);
+}
+
+/* --------------------------- Promotions --------------------------- */
+
+/** Le panier sous la forme attendue par le moteur de remises. */
+const promoLines = () =>
+  getCart().map((item) => ({
+    productId: item.productId,
+    qty: item.qty,
+    unitPrice: item.price,
+    lineTotal: Math.round(item.price * item.qty),
+  }));
+
+/**
+ * Remises applicables au panier courant. Le serveur refait exactement le même
+ * calcul à la commande : ceci sert uniquement à montrer le montant au client.
+ */
+export function cartDiscounts(config) {
+  return computeDiscounts(promoLines(), config?.promotions || []);
+}
+
+/**
+ * Récapitulatif complet d'un panier : sous-total, remises, livraison, total.
+ * Partagé par la boutique et la page de commande pour qu'elles affichent
+ * strictement la même chose.
+ */
+export function cartSummary(config) {
+  const promo = cartDiscounts(config);
+  const delivery = deliveryFee(promo.subtotal, config, promo.freeDelivery);
+  return {
+    subtotal: promo.subtotal,
+    discount: promo.discount,
+    discounts: promo.applied,
+    freeDelivery: promo.freeDelivery,
+    delivery,
+    total: promo.subtotal - promo.discount + delivery,
+  };
+}
+
+/**
+ * Phrase lisible décrivant une promotion : « خصم 20% على الثوم — عند شراء 2 كغ بطاطا ».
+ * La condition n'est mentionnée que lorsqu'il y en a une.
+ */
+export function describePromotion(promo) {
+  const rewardProduct = promo.rewardProduct?.name || '';
+  let reward;
+  if (promo.rewardType === 'free_delivery') {
+    reward = t('promo.rewardFreeDelivery');
+  } else if (promo.rewardType === 'percent') {
+    reward = promo.rewardScope === 'cart'
+      ? t('promo.rewardPercentCart', { percent: promo.rewardPercent })
+      : t('promo.rewardPercentProduct', { percent: promo.rewardPercent, product: rewardProduct });
+  } else {
+    reward = promo.rewardScope === 'cart'
+      ? t('promo.rewardAmountCart', { amount: money(promo.rewardAmount) })
+      : t('promo.rewardAmountProduct', { amount: money(promo.rewardAmount), product: rewardProduct });
+  }
+
+  let condition = '';
+  if (promo.triggerType === 'product' && promo.triggerProduct) {
+    condition = t('promo.triggerProduct', {
+      qty: qtyLabel(promo.triggerQty, promo.triggerProduct.unit),
+      product: promo.triggerProduct.name,
+    });
+  } else if (promo.triggerType === 'subtotal') {
+    condition = t('promo.triggerSubtotal', { amount: money(promo.triggerAmount) });
+  }
+
+  // Un plafond de quantité change ce que le client reçoit : il doit être visible.
+  const capped = promo.rewardType === 'percent' && promo.rewardMaxQty > 0 && promo.rewardProduct
+    ? t('promo.rewardCap', { qty: qtyLabel(promo.rewardMaxQty, promo.rewardProduct.unit) })
+    : '';
+
+  return [reward, capped, condition].filter(Boolean).join(' — ');
 }
 
 function updateCartCount() {

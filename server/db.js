@@ -42,6 +42,8 @@ db.exec(`
     phone               TEXT    NOT NULL,
     governorate         TEXT    NOT NULL,
     address             TEXT    NOT NULL,
+    lat                 REAL,
+    lng                 REAL,
     note                TEXT    NOT NULL DEFAULT '',
     preferred_time      TEXT    NOT NULL DEFAULT 'any',
     lang                TEXT    NOT NULL DEFAULT 'ar',
@@ -63,6 +65,28 @@ db.exec(`
     qty                 REAL    NOT NULL,
     unit_price_millimes INTEGER NOT NULL,
     line_millimes       INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS promotions (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    title                  TEXT    NOT NULL,
+    is_active              INTEGER NOT NULL DEFAULT 1,
+    trigger_type           TEXT    NOT NULL DEFAULT 'always',
+    trigger_product_id     INTEGER,
+    trigger_qty            REAL    NOT NULL DEFAULT 0,
+    trigger_amount_millimes INTEGER NOT NULL DEFAULT 0,
+    reward_type            TEXT    NOT NULL DEFAULT 'percent',
+    reward_scope           TEXT    NOT NULL DEFAULT 'product',
+    reward_product_id      INTEGER,
+    reward_percent         REAL    NOT NULL DEFAULT 0,
+    reward_amount_millimes INTEGER NOT NULL DEFAULT 0,
+    reward_max_qty         REAL    NOT NULL DEFAULT 0,
+    sort_order             INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
@@ -101,6 +125,12 @@ function mergeBilingualColumn(table, arColumn, frColumn, newColumn) {
 }
 
 addMissingColumns('products', { image_path: `TEXT NOT NULL DEFAULT ''` });
+// Point posé sur la carte au moment de la commande (facultatif, donc nullable).
+addMissingColumns('orders', { lat: 'REAL', lng: 'REAL' });
+addMissingColumns('orders', {
+  discount_millimes: 'INTEGER NOT NULL DEFAULT 0',
+  discounts_json: `TEXT NOT NULL DEFAULT '[]'`,
+});
 mergeBilingualColumn('products', 'name_ar', 'name_fr', 'name');
 mergeBilingualColumn('products', 'desc_ar', 'desc_fr', 'description');
 mergeBilingualColumn('products', 'farmer_ar', 'farmer_fr', 'farmer');
@@ -129,8 +159,88 @@ export const PRODUCT_ICONS = [
 export const SHOP = {
   deliveryMillimes: 5000,
   freeDeliveryFromMillimes: 60000,
+  deliveryAlwaysFree: 0,
   maxItemsPerOrder: 20,
+  announcementActive: 0,
+  announcementTitle: '',
+  announcementBody: '',
 };
+
+/** Longueurs maximales de l'encart d'annonce. */
+export const ANNOUNCEMENT_LIMITS = { title: 80, body: 400 };
+
+/** Bornes des réglages modifiables par le vendeur (en millimes). */
+export const SHOP_LIMITS = {
+  deliveryMillimes: { min: 0, max: 100000 },
+  freeDeliveryFromMillimes: { min: 0, max: 1000000 },
+};
+
+/** Réglages chiffrés modifiables depuis le tableau de bord. */
+const NUMBER_SETTINGS = ['deliveryMillimes', 'freeDeliveryFromMillimes', 'deliveryAlwaysFree', 'announcementActive'];
+/** Réglages en texte libre (l'encart d'annonce). */
+const TEXT_SETTINGS = ['announcementTitle', 'announcementBody'];
+
+/**
+ * Réglages en vigueur : les valeurs enregistrées par le vendeur, complétées
+ * par les valeurs par défaut de SHOP tant qu'il n'a rien changé.
+ */
+export function shopSettings() {
+  const stored = Object.fromEntries(
+    db.prepare('SELECT key, value FROM settings').all().map((r) => [r.key, r.value])
+  );
+  const settings = { ...SHOP };
+  for (const key of NUMBER_SETTINGS) {
+    const value = Number(stored[key]);
+    if (stored[key] !== undefined && Number.isFinite(value)) settings[key] = value;
+  }
+  for (const key of TEXT_SETTINGS) {
+    if (typeof stored[key] === 'string') settings[key] = stored[key];
+  }
+  settings.deliveryAlwaysFree = Boolean(settings.deliveryAlwaysFree);
+  settings.announcementActive = Boolean(settings.announcementActive);
+  return settings;
+}
+
+/** Enregistre les réglages fournis (les autres restent inchangés). */
+export function saveShopSettings(values) {
+  const upsert = db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `);
+  for (const key of [...NUMBER_SETTINGS, ...TEXT_SETTINGS]) {
+    if (values[key] !== undefined) upsert.run(key, String(values[key]));
+  }
+  return shopSettings();
+}
+
+/**
+ * Promotions telles que les attend le moteur de remises (public/js/promo.js).
+ * `activeOnly` sert la boutique ; le tableau de bord veut aussi les inactives.
+ */
+export function listPromotions({ activeOnly = false } = {}) {
+  const rows = db
+    .prepare(`SELECT * FROM promotions ${activeOnly ? 'WHERE is_active = 1' : ''} ORDER BY sort_order, id`)
+    .all();
+  return rows.map(promotionFromRow);
+}
+
+export function promotionFromRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    active: Boolean(row.is_active),
+    triggerType: row.trigger_type,
+    triggerProductId: row.trigger_product_id,
+    triggerQty: row.trigger_qty,
+    triggerAmount: row.trigger_amount_millimes,
+    rewardType: row.reward_type,
+    rewardScope: row.reward_scope,
+    rewardProductId: row.reward_product_id,
+    rewardPercent: row.reward_percent,
+    rewardAmount: row.reward_amount_millimes,
+    rewardMaxQty: row.reward_max_qty,
+  };
+}
 
 export function nextOrderReference() {
   const today = new Date();

@@ -99,6 +99,62 @@
                 <span class="field__hint" id="address-hint" data-i18n="form.addressHint"></span>
                 <span class="field__error" data-error-for="address"></span>
               </div>
+
+              <!-- Point sur la carte : facultatif, mais très utile au livreur. -->
+              <div class="field map-field" data-field="pin">
+                <span class="field__label" id="pin-label">
+                  <span data-i18n="form.pin"></span>
+                  <span class="badge badge--soft" data-i18n="form.pinOptional"></span>
+                </span>
+
+                <button type="button" class="btn btn--ghost btn--block" id="pin-open">
+                  <span data-icon="pin"></span>
+                  <span data-i18n="form.pinOpen"></span>
+                </button>
+
+                <div class="map-picker" id="pin-picker" hidden>
+                  <div class="map" id="pin-map" tabindex="0" role="application"
+                       aria-describedby="pin-help" data-i18n-aria="form.pin">
+                    <div class="map__crosshair" aria-hidden="true">
+                      <span data-icon="pin"></span>
+                    </div>
+                    <div class="map__zoom">
+                      <button type="button" data-map-zoom="1" data-i18n-aria="form.pinZoomIn">+</button>
+                      <button type="button" data-map-zoom="-1" data-i18n-aria="form.pinZoomOut">−</button>
+                    </div>
+                    <p class="map__credit">
+                      ©&nbsp;<a href="https://www.openstreetmap.org/copyright" target="_blank"
+                                rel="noopener">OpenStreetMap</a>
+                    </p>
+                  </div>
+
+                  <p class="field__hint" id="pin-help" data-i18n="form.pinHelp"></p>
+
+                  <div class="map-picker__actions">
+                    <button type="button" class="btn btn--sm" id="pin-locate">
+                      <span data-icon="target"></span>
+                      <span data-i18n="form.pinLocate"></span>
+                    </button>
+                    <button type="button" class="btn btn--sm btn--accent" id="pin-confirm">
+                      <span data-icon="check"></span>
+                      <span data-i18n="form.pinConfirm"></span>
+                    </button>
+                    <button type="button" class="btn btn--sm btn--ghost" id="pin-cancel" data-i18n="form.pinCancel"></button>
+                  </div>
+                </div>
+
+                <div class="map-pinned" id="pin-summary" hidden>
+                  <span data-icon="pin"></span>
+                  <span class="map-pinned__text">
+                    <strong data-i18n="form.pinSaved"></strong>
+                    <span class="map-pinned__coords" id="pin-coords" dir="ltr"></span>
+                  </span>
+                  <button type="button" class="btn btn--sm btn--ghost" id="pin-clear" data-i18n="form.pinClear"></button>
+                </div>
+
+                <input type="hidden" name="lat" id="pin-lat">
+                <input type="hidden" name="lng" id="pin-lng">
+              </div>
             </div>
 
             <div class="panel">

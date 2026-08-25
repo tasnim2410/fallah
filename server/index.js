@@ -6,12 +6,17 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import {
   db, ORDER_STATUSES, PRODUCT_CATEGORIES, PRODUCT_UNITS, PRODUCT_ICONS,
-  SHOP, UPLOADS_DIR, nextOrderReference,
+  SHOP, SHOP_LIMITS, ANNOUNCEMENT_LIMITS, UPLOADS_DIR, nextOrderReference,
+  shopSettings, saveShopSettings, listPromotions, promotionFromRow,
 } from './db.js';
 import { seedProducts } from './seed.js';
 import {
-  GOVERNORATES, validateCustomer, validateCartShape, validateProduct, slugify, detectImage,
+  GOVERNORATES, validateCustomer, validateCartShape, validateProduct, validatePromotion,
+  slugify, detectImage,
 } from './validate.js';
+import {
+  computeDiscounts, resolveDelivery, TRIGGER_TYPES, REWARD_TYPES, REWARD_SCOPES,
+} from '../public/js/promo.js';
 
 try {
   process.loadEnvFile();
@@ -274,12 +279,24 @@ const orderItems = (orderId) =>
       lineTotal: i.line_millimes,
     }));
 
+/** Remises figées au moment de la commande (l'historique ne bouge plus après). */
+function orderDiscounts(row) {
+  try {
+    const parsed = JSON.parse(row.discounts_json || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 const publicOrder = (row) => ({
   reference: row.reference,
   status: row.status,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   subtotal: row.subtotal_millimes,
+  discount: row.discount_millimes || 0,
+  discounts: orderDiscounts(row),
   delivery: row.delivery_millimes,
   total: row.total_millimes,
   governorate: row.governorate,
@@ -293,6 +310,9 @@ const adminOrder = (row) => ({
   customerName: row.customer_name,
   phone: row.phone,
   address: row.address,
+  // Point posé sur la carte : réservé au vendeur, jamais exposé au suivi public.
+  lat: row.lat ?? null,
+  lng: row.lng ?? null,
   note: row.note,
   adminNote: row.admin_note,
   lang: row.lang,
@@ -302,14 +322,35 @@ const adminOrder = (row) => ({
  * Routes API
  * ------------------------------------------------------------------ */
 
+/** Nom et unité d'un produit référencé par une promotion (null s'il a disparu). */
+function promotionProduct(productId) {
+  if (!productId) return null;
+  const row = db.prepare('SELECT id, name, unit FROM products WHERE id = ?').get(productId);
+  return row ? { id: row.id, name: row.name, unit: row.unit } : null;
+}
+
+/** Promotion enrichie des noms de produits, pour être affichée telle quelle. */
+const promotionPayload = (promo) => ({
+  ...promo,
+  triggerProduct: promotionProduct(promo.triggerProductId),
+  rewardProduct: promotionProduct(promo.rewardProductId),
+});
+
 function getConfig(res) {
+  const shop = shopSettings();
+  const announcementReady = shop.announcementActive && Boolean(shop.announcementTitle || shop.announcementBody);
   sendJson(res, 200, {
     shopPhone: SHOP_PHONE,
-    delivery: SHOP.deliveryMillimes,
-    freeDeliveryFrom: SHOP.freeDeliveryFromMillimes,
-    maxItemsPerOrder: SHOP.maxItemsPerOrder,
+    delivery: shop.deliveryMillimes,
+    freeDeliveryFrom: shop.freeDeliveryFromMillimes,
+    deliveryAlwaysFree: shop.deliveryAlwaysFree,
+    maxItemsPerOrder: shop.maxItemsPerOrder,
     governorates: GOVERNORATES,
     statuses: ORDER_STATUSES,
+    announcement: announcementReady
+      ? { title: shop.announcementTitle, body: shop.announcementBody }
+      : null,
+    promotions: listPromotions({ activeOnly: true }).map(promotionPayload),
   });
 }
 
@@ -368,15 +409,32 @@ async function createOrder(req, res, ip) {
     lines.push({ p, qty, lineTotal });
   }
 
-  const delivery = subtotal >= SHOP.freeDeliveryFromMillimes ? 0 : SHOP.deliveryMillimes;
-  const total = subtotal + delivery;
+  /* Remises et frais de livraison sortent tous de la base : le client peut
+   * afficher ce qu'il veut, seul ce calcul-ci fixe le montant à payer. */
+  const shop = shopSettings();
+  const cartLines = lines.map(({ p, qty, lineTotal }) => ({
+    productId: p.id, qty, unitPrice: p.price_millimes, lineTotal,
+  }));
+  const promo = computeDiscounts(cartLines, listPromotions({ activeOnly: true }));
+  const discount = promo.discount;
+  const delivery = resolveDelivery(
+    subtotal,
+    {
+      alwaysFree: shop.deliveryAlwaysFree,
+      freeDeliveryFrom: shop.freeDeliveryFromMillimes,
+      delivery: shop.deliveryMillimes,
+    },
+    promo.freeDelivery
+  );
+  const total = subtotal - discount + delivery;
   const now = new Date().toISOString();
   const c = customer.value;
 
   const insertOrder = db.prepare(`
-    INSERT INTO orders (reference, customer_name, phone, governorate, address, note, preferred_time,
-                        lang, subtotal_millimes, delivery_millimes, total_millimes, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    INSERT INTO orders (reference, customer_name, phone, governorate, address, lat, lng, note, preferred_time,
+                        lang, subtotal_millimes, discount_millimes, discounts_json,
+                        delivery_millimes, total_millimes, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
   `);
   const insertItem = db.prepare(`
     INSERT INTO order_items (order_id, product_id, name, unit, qty, unit_price_millimes, line_millimes)
@@ -389,8 +447,8 @@ async function createOrder(req, res, ip) {
   try {
     reference = nextOrderReference();
     const { lastInsertRowid } = insertOrder.run(
-      reference, c.name, c.phone, c.governorate, c.address, c.note, c.preferredTime,
-      c.lang, subtotal, delivery, total, now, now
+      reference, c.name, c.phone, c.governorate, c.address, c.lat, c.lng, c.note, c.preferredTime,
+      c.lang, subtotal, discount, JSON.stringify(promo.applied), delivery, total, now, now
     );
     for (const { p, qty, lineTotal } of lines) {
       insertItem.run(Number(lastInsertRowid), p.id, p.name, p.unit, qty, p.price_millimes, lineTotal);
@@ -405,7 +463,10 @@ async function createOrder(req, res, ip) {
 
   recordHit(ip);
   console.log(`[commande] ${reference} — ${c.name} (${c.phone}) — ${(total / 1000).toFixed(3)} DT — à confirmer par téléphone`);
-  sendJson(res, 201, { reference, status: 'pending', subtotal, delivery, total, shopPhone: SHOP_PHONE });
+  sendJson(res, 201, {
+    reference, status: 'pending', subtotal,
+    discount, discounts: promo.applied, delivery, total, shopPhone: SHOP_PHONE,
+  });
 }
 
 function trackOrder(res, url) {
@@ -483,6 +544,191 @@ async function adminUpdateOrder(req, res, id) {
     .run(status, adminNote, new Date().toISOString(), id);
 
   sendJson(res, 200, { order: adminOrder(db.prepare('SELECT * FROM orders WHERE id = ?').get(id)) });
+}
+
+/* ------------------------- Réglages boutique ---------------------- */
+
+const shopPayload = () => {
+  const shop = shopSettings();
+  return {
+    settings: {
+      delivery: shop.deliveryMillimes,
+      freeDeliveryFrom: shop.freeDeliveryFromMillimes,
+      alwaysFree: shop.deliveryAlwaysFree,
+      announcementActive: shop.announcementActive,
+      announcementTitle: shop.announcementTitle,
+      announcementBody: shop.announcementBody,
+    },
+    limits: {
+      delivery: SHOP_LIMITS.deliveryMillimes,
+      freeDeliveryFrom: SHOP_LIMITS.freeDeliveryFromMillimes,
+    },
+  };
+};
+
+function adminSettings(res) {
+  sendJson(res, 200, shopPayload());
+}
+
+/** Millimes : un entier positif, dans les bornes du réglage. */
+function checkMillimes(value, limits) {
+  return Number.isInteger(value) && value >= limits.min && value <= limits.max;
+}
+
+async function adminUpdateSettings(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req, 4096);
+  } catch {
+    return fail(res, 400, 'invalid_json');
+  }
+
+  const values = {};
+  if (body?.delivery !== undefined) {
+    const delivery = Number(body.delivery);
+    if (!checkMillimes(delivery, SHOP_LIMITS.deliveryMillimes)) {
+      return fail(res, 400, 'delivery_invalid', 'delivery');
+    }
+    values.deliveryMillimes = delivery;
+  }
+  if (body?.freeDeliveryFrom !== undefined) {
+    const threshold = Number(body.freeDeliveryFrom);
+    if (!checkMillimes(threshold, SHOP_LIMITS.freeDeliveryFromMillimes)) {
+      return fail(res, 400, 'free_delivery_invalid', 'freeDeliveryFrom');
+    }
+    values.freeDeliveryFromMillimes = threshold;
+  }
+  if (body?.alwaysFree !== undefined) {
+    values.deliveryAlwaysFree = body.alwaysFree ? 1 : 0;
+  }
+  if (body?.announcementActive !== undefined) {
+    values.announcementActive = body.announcementActive ? 1 : 0;
+  }
+  // L'encart d'annonce est du texte libre : on retire seulement les caracteres
+  // de controle et on borne la longueur (les sauts de ligne sont conserves).
+  if (body?.announcementTitle !== undefined) {
+    values.announcementTitle = cleanAnnouncement(body.announcementTitle, ANNOUNCEMENT_LIMITS.title, false);
+  }
+  if (body?.announcementBody !== undefined) {
+    values.announcementBody = cleanAnnouncement(body.announcementBody, ANNOUNCEMENT_LIMITS.body, true);
+  }
+
+  saveShopSettings(values);
+  const payload = shopPayload();
+  console.log(`[réglages] livraison : ${(payload.settings.delivery / 1000).toFixed(3)} DT — offerte dès ${(payload.settings.freeDeliveryFrom / 1000).toFixed(3)} DT`);
+  sendJson(res, 200, payload);
+}
+
+/** Texte d'annonce : sans caracteres de controle, longueur bornee. */
+function cleanAnnouncement(value, max, keepLineBreaks) {
+  if (typeof value !== 'string') return '';
+  const pattern = keepLineBreaks ? /[\u0000-\u0009\u000B-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g;
+  return value.replace(pattern, ' ').trim().slice(0, max);
+}
+
+/* --------------------------- Promotions --------------------------- */
+
+const PROMO_RULES = { triggers: TRIGGER_TYPES, rewards: REWARD_TYPES, scopes: REWARD_SCOPES };
+
+/** Colonnes de la table pour chaque champ valide. */
+const PROMO_COLUMNS = {
+  title: 'title', isActive: 'is_active',
+  triggerType: 'trigger_type', triggerProductId: 'trigger_product_id',
+  triggerQty: 'trigger_qty', triggerAmount: 'trigger_amount_millimes',
+  rewardType: 'reward_type', rewardScope: 'reward_scope', rewardProductId: 'reward_product_id',
+  rewardPercent: 'reward_percent', rewardAmount: 'reward_amount_millimes', rewardMaxQty: 'reward_max_qty',
+};
+
+const productExists = (id) => Boolean(db.prepare('SELECT 1 FROM products WHERE id = ?').get(id));
+
+function adminPromotions(res) {
+  sendJson(res, 200, {
+    promotions: listPromotions().map(promotionPayload),
+    triggers: TRIGGER_TYPES,
+    rewards: REWARD_TYPES,
+    scopes: REWARD_SCOPES,
+    // Le formulaire propose la liste des produits pour le declencheur et la remise.
+    products: db.prepare('SELECT id, name, unit FROM products ORDER BY sort_order, id').all(),
+  });
+}
+
+/** Controle commun aux deux ecritures : les produits vises doivent exister. */
+function checkPromotionProducts(value) {
+  if (value.triggerProductId && !productExists(value.triggerProductId)) {
+    return { code: 'promo_trigger_product_required', field: 'triggerProductId' };
+  }
+  if (value.rewardProductId && !productExists(value.rewardProductId)) {
+    return { code: 'promo_reward_product_required', field: 'rewardProductId' };
+  }
+  return null;
+}
+
+async function adminCreatePromotion(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req, 8192);
+  } catch {
+    return fail(res, 400, 'invalid_json');
+  }
+
+  const checked = validatePromotion(body, PROMO_RULES);
+  if (!checked.ok) return fail(res, 400, checked.code, checked.field);
+
+  const missing = checkPromotionProducts(checked.value);
+  if (missing) return fail(res, 400, missing.code, missing.field);
+
+  const keys = Object.keys(PROMO_COLUMNS);
+  const { last } = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS last FROM promotions').get();
+  const { lastInsertRowid } = db
+    .prepare(
+      `INSERT INTO promotions (sort_order, ${keys.map((k) => PROMO_COLUMNS[k]).join(', ')})
+       VALUES (?, ${keys.map(() => '?').join(', ')})`
+    )
+    .run(last + 10, ...keys.map((k) => checked.value[k]));
+
+  const created = db.prepare('SELECT * FROM promotions WHERE id = ?').get(Number(lastInsertRowid));
+  console.log(`[promotions] ajoutee : ${created.title}`);
+  sendJson(res, 201, { promotion: promotionPayload(promotionFromRow(created)) });
+}
+
+async function adminUpdatePromotion(req, res, id) {
+  let body;
+  try {
+    body = await readJsonBody(req, 8192);
+  } catch {
+    return fail(res, 400, 'invalid_json');
+  }
+  const existing = db.prepare('SELECT * FROM promotions WHERE id = ?').get(id);
+  if (!existing) return fail(res, 404, 'promo_not_found');
+
+  /* Bascule rapide depuis la liste : seul « active » change, le reste de la
+   * promotion est repris tel quel plutot que revalide a moitie. */
+  if (Object.keys(body || {}).length === 1 && body?.active !== undefined) {
+    db.prepare('UPDATE promotions SET is_active = ? WHERE id = ?').run(body.active ? 1 : 0, id);
+    const toggled = db.prepare('SELECT * FROM promotions WHERE id = ?').get(id);
+    return sendJson(res, 200, { promotion: promotionPayload(promotionFromRow(toggled)) });
+  }
+
+  const checked = validatePromotion(body, PROMO_RULES);
+  if (!checked.ok) return fail(res, 400, checked.code, checked.field);
+
+  const missing = checkPromotionProducts(checked.value);
+  if (missing) return fail(res, 400, missing.code, missing.field);
+
+  const keys = Object.keys(PROMO_COLUMNS);
+  db.prepare(`UPDATE promotions SET ${keys.map((k) => `${PROMO_COLUMNS[k]} = ?`).join(', ')} WHERE id = ?`)
+    .run(...keys.map((k) => checked.value[k]), id);
+
+  const saved = db.prepare('SELECT * FROM promotions WHERE id = ?').get(id);
+  sendJson(res, 200, { promotion: promotionPayload(promotionFromRow(saved)) });
+}
+
+function adminDeletePromotion(res, id) {
+  const existing = db.prepare('SELECT * FROM promotions WHERE id = ?').get(id);
+  if (!existing) return fail(res, 404, 'promo_not_found');
+  db.prepare('DELETE FROM promotions WHERE id = ?').run(id);
+  console.log(`[promotions] supprimee : ${existing.title}`);
+  sendJson(res, 200, { deleted: id });
 }
 
 const adminProduct = (row) => ({ ...publicProduct(row), isAvailable: Boolean(row.is_available) });
@@ -582,6 +828,11 @@ function adminDeleteProduct(res, id) {
   // Les commandes gardent leur propre copie du nom et du prix : l'historique
   // reste lisible même après la suppression du produit.
   db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  // Une promotion qui vise un produit disparu ne veut plus rien dire.
+  const orphaned = db
+    .prepare('DELETE FROM promotions WHERE trigger_product_id = ? OR reward_product_id = ?')
+    .run(id, id).changes;
+  if (orphaned) console.log(`[promotions] ${orphaned} promotion(s) retiree(s) avec le produit`);
   if (product.image_path) removeUpload(product.image_path);
 
   console.log(`[catalogue] produit supprimé : ${product.name} (${product.slug})`);
@@ -701,6 +952,14 @@ const server = createServer(async (req, res) => {
       if (path === '/api/admin/orders' && req.method === 'GET') return adminOrders(res, url);
       if (path === '/api/admin/products' && req.method === 'GET') return adminProducts(res);
       if (path === '/api/admin/products' && req.method === 'POST') return await adminCreateProduct(req, res);
+      if (path === '/api/admin/settings' && req.method === 'GET') return adminSettings(res);
+      if (path === '/api/admin/settings' && req.method === 'PATCH') return await adminUpdateSettings(req, res);
+      if (path === '/api/admin/promotions' && req.method === 'GET') return adminPromotions(res);
+      if (path === '/api/admin/promotions' && req.method === 'POST') return await adminCreatePromotion(req, res);
+
+      const promoMatch = path.match(/^\/api\/admin\/promotions\/(\d+)$/);
+      if (promoMatch && req.method === 'PATCH') return await adminUpdatePromotion(req, res, Number(promoMatch[1]));
+      if (promoMatch && req.method === 'DELETE') return adminDeletePromotion(res, Number(promoMatch[1]));
 
       const orderMatch = path.match(/^\/api\/admin\/orders\/(\d+)$/);
       if (orderMatch && req.method === 'PATCH') return await adminUpdateOrder(req, res, Number(orderMatch[1]));

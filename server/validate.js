@@ -1,18 +1,29 @@
-/** Gouvernorats livrés. La clé est stockée en base, les libellés servent à l'affichage. */
+/**
+ * Gouvernorats livrés. La clé est stockée en base, les libellés servent à
+ * l'affichage, et `lat`/`lng` centrent la carte dès que le client choisit
+ * son gouvernorat.
+ */
 export const GOVERNORATES = [
-  { key: 'tunis', ar: 'تونس', fr: 'Tunis' },
-  { key: 'ariana', ar: 'أريانة', fr: 'Ariana' },
-  { key: 'ben-arous', ar: 'بن عروس', fr: 'Ben Arous' },
-  { key: 'manouba', ar: 'منوبة', fr: 'Manouba' },
-  { key: 'nabeul', ar: 'نابل', fr: 'Nabeul' },
-  { key: 'bizerte', ar: 'بنزرت', fr: 'Bizerte' },
-  { key: 'zaghouan', ar: 'زغوان', fr: 'Zaghouan' },
-  { key: 'sousse', ar: 'سوسة', fr: 'Sousse' },
-  { key: 'monastir', ar: 'المنستير', fr: 'Monastir' },
-  { key: 'mahdia', ar: 'المهدية', fr: 'Mahdia' },
-  { key: 'sfax', ar: 'صفاقس', fr: 'Sfax' },
-  { key: 'kairouan', ar: 'القيروان', fr: 'Kairouan' },
+  { key: 'tunis', ar: 'تونس', fr: 'Tunis', lat: 36.8065, lng: 10.1815 },
+  { key: 'ariana', ar: 'أريانة', fr: 'Ariana', lat: 36.8625, lng: 10.1956 },
+  { key: 'ben-arous', ar: 'بن عروس', fr: 'Ben Arous', lat: 36.7533, lng: 10.2280 },
+  { key: 'manouba', ar: 'منوبة', fr: 'Manouba', lat: 36.8081, lng: 10.0972 },
+  { key: 'nabeul', ar: 'نابل', fr: 'Nabeul', lat: 36.4560, lng: 10.7376 },
+  { key: 'bizerte', ar: 'بنزرت', fr: 'Bizerte', lat: 37.2746, lng: 9.8739 },
+  { key: 'zaghouan', ar: 'زغوان', fr: 'Zaghouan', lat: 36.4029, lng: 10.1429 },
+  { key: 'sousse', ar: 'سوسة', fr: 'Sousse', lat: 35.8256, lng: 10.6360 },
+  { key: 'monastir', ar: 'المنستير', fr: 'Monastir', lat: 35.7780, lng: 10.8262 },
+  { key: 'mahdia', ar: 'المهدية', fr: 'Mahdia', lat: 35.5047, lng: 11.0622 },
+  { key: 'sfax', ar: 'صفاقس', fr: 'Sfax', lat: 34.7406, lng: 10.7603 },
+  { key: 'kairouan', ar: 'القيروان', fr: 'Kairouan', lat: 35.6781, lng: 10.0963 },
 ];
+
+/**
+ * Rectangle englobant la Tunisie, avec une marge. Un point pointé hors de
+ * cette zone est forcément une erreur : on le refuse plutôt que d'envoyer
+ * le livreur à l'autre bout du monde.
+ */
+const TUNISIA_BOUNDS = { minLat: 30, maxLat: 38, minLng: 7, maxLng: 12 };
 
 const GOVERNORATE_KEYS = new Set(GOVERNORATES.map((g) => g.key));
 
@@ -61,13 +72,39 @@ export function validateCustomer(body) {
   const address = cleanText(body?.address, 300);
   if (address.length < 10) return { ok: false, field: 'address', code: 'address_too_short' };
 
+  // Le point sur la carte reste facultatif : l'adresse écrite suffit à livrer.
+  const pin = normalizePin(body?.lat, body?.lng);
+  if (pin === null) return { ok: false, field: 'address', code: 'pin_invalid' };
+
   const preferredTime = PREFERRED_TIMES.includes(body?.preferredTime) ? body.preferredTime : 'any';
   const lang = body?.lang === 'fr' ? 'fr' : 'ar';
 
   return {
     ok: true,
-    value: { name, phone, governorate, address, note: cleanText(body?.note, 300), preferredTime, lang },
+    value: {
+      name, phone, governorate, address,
+      lat: pin.lat, lng: pin.lng,
+      note: cleanText(body?.note, 300), preferredTime, lang,
+    },
   };
+}
+
+/**
+ * Vérifie le point posé sur la carte.
+ * @returns {{lat: number|null, lng: number|null}|null} les coordonnées
+ *   (à null quand le client n'a rien pointé), ou null si elles sont invalides.
+ */
+function normalizePin(rawLat, rawLng) {
+  if (rawLat === undefined || rawLat === null || rawLat === '') {
+    return { lat: null, lng: null };
+  }
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < TUNISIA_BOUNDS.minLat || lat > TUNISIA_BOUNDS.maxLat) return null;
+  if (lng < TUNISIA_BOUNDS.minLng || lng > TUNISIA_BOUNDS.maxLng) return null;
+  // Six décimales ≈ 10 cm : au-delà, ce ne sont plus que des chiffres inutiles.
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
 }
 
 const COMBINING_MARKS = new RegExp('[\\u0300-\\u036F]', 'g');
@@ -150,6 +187,103 @@ export function validateProduct(body, { units, categories, icons, partial = fals
 
   if (body?.isBio !== undefined) value.isBio = Number(Boolean(body.isBio));
   if (body?.isAvailable !== undefined) value.isAvailable = Number(Boolean(body.isAvailable));
+
+  return { ok: true, value };
+}
+
+/**
+ * Valide une promotion saisie par le vendeur. Chaque promotion associe une
+ * condition (déclencheur) à un avantage (récompense) ; on ne garde que les
+ * champs utiles au couple choisi, pour qu'une valeur oubliée dans le
+ * formulaire ne vienne pas fausser le calcul plus tard.
+ * @param {object} body données du formulaire
+ * @param {{triggers: string[], rewards: string[], scopes: string[]}} options
+ */
+export function validatePromotion(body, { triggers, rewards, scopes }) {
+  const title = cleanText(body?.title, 120);
+  if (title.length < 3) return { ok: false, field: 'title', code: 'promo_title_required' };
+
+  const value = {
+    title,
+    isActive: Number(body?.active === undefined ? 1 : Boolean(body.active)),
+    triggerType: body?.triggerType,
+    triggerProductId: null,
+    triggerQty: 0,
+    triggerAmount: 0,
+    rewardType: body?.rewardType,
+    rewardScope: 'cart',
+    rewardProductId: null,
+    rewardPercent: 0,
+    rewardAmount: 0,
+    rewardMaxQty: 0,
+  };
+
+  if (!triggers.includes(value.triggerType)) {
+    return { ok: false, field: 'triggerType', code: 'promo_trigger_invalid' };
+  }
+  if (!rewards.includes(value.rewardType)) {
+    return { ok: false, field: 'rewardType', code: 'promo_reward_invalid' };
+  }
+
+  if (value.triggerType === 'product') {
+    const productId = Number(body?.triggerProductId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return { ok: false, field: 'triggerProductId', code: 'promo_trigger_product_required' };
+    }
+    const qty = Number(body?.triggerQty);
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 1000) {
+      return { ok: false, field: 'triggerQty', code: 'promo_trigger_qty_invalid' };
+    }
+    value.triggerProductId = productId;
+    value.triggerQty = Math.round(qty * 100) / 100;
+  }
+
+  if (value.triggerType === 'subtotal') {
+    const amount = Number(body?.triggerAmount);
+    if (!Number.isInteger(amount) || amount < 0 || amount > 1000000) {
+      return { ok: false, field: 'triggerAmount', code: 'promo_trigger_amount_invalid' };
+    }
+    value.triggerAmount = amount;
+  }
+
+  // La livraison offerte ne vise aucun produit : le reste du formulaire est ignoré.
+  if (value.rewardType === 'free_delivery') return { ok: true, value };
+
+  if (!scopes.includes(body?.rewardScope)) {
+    return { ok: false, field: 'rewardScope', code: 'promo_scope_invalid' };
+  }
+  value.rewardScope = body.rewardScope;
+
+  if (value.rewardScope === 'product') {
+    const productId = Number(body?.rewardProductId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return { ok: false, field: 'rewardProductId', code: 'promo_reward_product_required' };
+    }
+    value.rewardProductId = productId;
+  }
+
+  if (value.rewardType === 'percent') {
+    const percent = Number(body?.rewardPercent);
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+      return { ok: false, field: 'rewardPercent', code: 'promo_percent_invalid' };
+    }
+    value.rewardPercent = Math.round(percent * 100) / 100;
+
+    // Plafond facultatif : 0 = toute la quantité commandée est remisée.
+    const maxQty = body?.rewardMaxQty === undefined || body.rewardMaxQty === '' ? 0 : Number(body.rewardMaxQty);
+    if (!Number.isFinite(maxQty) || maxQty < 0 || maxQty > 1000) {
+      return { ok: false, field: 'rewardMaxQty', code: 'promo_max_qty_invalid' };
+    }
+    value.rewardMaxQty = Math.round(maxQty * 100) / 100;
+  }
+
+  if (value.rewardType === 'amount') {
+    const amount = Number(body?.rewardAmount);
+    if (!Number.isInteger(amount) || amount <= 0 || amount > 1000000) {
+      return { ok: false, field: 'rewardAmount', code: 'promo_amount_invalid' };
+    }
+    value.rewardAmount = amount;
+  }
 
   return { ok: true, value };
 }

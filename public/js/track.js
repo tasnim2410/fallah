@@ -25,6 +25,16 @@ function governorateLabel(key) {
   return gov ? pick(gov) : key;
 }
 
+/** Remises appliquées à la commande, telles qu'elles ont été figées à l'achat. */
+function orderDiscountRows(order) {
+  return (order.discounts || [])
+    .map(
+      (d) => `<li class="is-discount"><span>${esc(d.title)}</span>
+        <span>${d.freeDelivery ? esc(t('cart.deliveryFree')) : `−${esc(money(d.amount))}`}</span></li>`
+    )
+    .join('');
+}
+
 function renderOrder(order) {
   currentOrder = order;
   const index = FLOW_INDEX[order.status] ?? 0;
@@ -69,6 +79,7 @@ function renderOrder(order) {
                         <span>${esc(money(i.lineTotal))}</span></li>`
           )
           .join('')}
+        ${orderDiscountRows(order)}
         <li><span>${esc(t('cart.delivery'))}</span>
             <span>${order.delivery === 0 ? esc(t('cart.deliveryFree')) : esc(money(order.delivery))}</span></li>
       </ul>

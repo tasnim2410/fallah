@@ -5,8 +5,9 @@ import { produceIcon, icon } from './icons.js';
 import {
   initShell, api, getConfig, toast, esc,
   getCart, addToCart, setCartQty, removeFromCart, onCartChange,
-  cartSubtotal, deliveryFee, lineMedia,
+  cartSummary, describePromotion, lineMedia,
 } from './app.js';
+import { totalsMarkup } from './totals.js';
 
 const CATEGORIES = ['all', 'vegetables', 'fruits', 'pantry', 'animal'];
 
@@ -234,17 +235,7 @@ function renderCart() {
   cartBody.innerHTML = items.map(cartLine).join('');
   cartFoot.hidden = false;
 
-  const subtotal = cartSubtotal();
-  const delivery = deliveryFee(subtotal, config);
-  const missing = config ? config.freeDeliveryFrom - subtotal : 0;
-
-  cartTotals.innerHTML = `
-    <div class="totals__row"><span>${esc(t('cart.subtotal'))}</span><span>${esc(money(subtotal))}</span></div>
-    <div class="totals__row"><span>${esc(t('cart.delivery'))}</span>
-      <span>${delivery === 0 ? esc(t('cart.deliveryFree')) : esc(money(delivery))}</span></div>
-    ${missing > 0 ? `<div class="totals__row totals__row--free"><span>${esc(t('cart.freeHint', { amount: money(missing) }))}</span></div>` : ''}
-    <div class="totals__row totals__row--grand"><span>${esc(t('cart.total'))}</span>
-      <span>${esc(money(subtotal + delivery))}</span></div>`;
+  cartTotals.innerHTML = totalsMarkup(cartSummary(config), config);
 }
 
 cartBody.addEventListener('click', (event) => {
@@ -281,12 +272,76 @@ onLangChange(() => {
   renderCategories();
   renderProducts();
   renderCart();
+  renderPromotions();
+  updateOffersVisibility();
 });
+
+/* ------------------------ Annonce et offres ----------------------- */
+
+const offersSection = document.getElementById('offers');
+const announceBox = document.getElementById('announcement');
+const promoBox = document.getElementById('promotions');
+
+/** La section entière disparaît tant qu'il n'y a ni annonce ni offre. */
+function updateOffersVisibility() {
+  if (!offersSection) return;
+  offersSection.hidden = Boolean(announceBox?.hidden) && Boolean(promoBox?.hidden);
+}
+
+/** Encart libre rédigé par le vendeur (masqué tant qu'il n'a rien écrit). */
+function renderAnnouncement() {
+  if (!announceBox) return;
+  const announcement = config?.announcement;
+  if (!announcement) {
+    announceBox.hidden = true;
+    announceBox.innerHTML = '';
+    return;
+  }
+  announceBox.hidden = false;
+  announceBox.innerHTML = `
+    <div class="announce">
+      <span class="announce__icon">${icon('tag')}</span>
+      <div>
+        ${announcement.title ? `<h2 class="announce__title">${esc(announcement.title)}</h2>` : ''}
+        ${announcement.body ? `<p class="announce__body">${esc(announcement.body)}</p>` : ''}
+      </div>
+    </div>`;
+}
+
+/** Les promotions actives, décrites en toutes lettres pour le client. */
+function renderPromotions() {
+  if (!promoBox) return;
+  const promotions = config?.promotions || [];
+  if (!promotions.length) {
+    promoBox.hidden = true;
+    promoBox.innerHTML = '';
+    return;
+  }
+  promoBox.hidden = false;
+  promoBox.innerHTML = `
+    <h2 class="promo-list__title">${esc(t('promo.listTitle'))}</h2>
+    <div class="promo-list">
+      ${promotions
+        .map(
+          (promo) => `<article class="promo-card">
+            <span class="promo-card__icon">${icon('tag')}</span>
+            <div>
+              <h3>${esc(promo.title)}</h3>
+              <p>${esc(describePromotion(promo))}</p>
+            </div>
+          </article>`
+        )
+        .join('')}
+    </div>`;
+}
 
 /* --------------------------- Démarrage --------------------------- */
 
 async function load() {
   config = await getConfig();
+  renderAnnouncement();
+  renderPromotions();
+  updateOffersVisibility();
   const res = await api('/api/products');
   if (!res.ok) {
     grid.setAttribute('aria-busy', 'false');

@@ -2,7 +2,10 @@
 
 import { t, pick, money, qtyLabel, dateLabel, onLangChange } from './i18n.js';
 import { icon, produceIcon } from './icons.js';
-import { initShell, api, getConfig, toast, esc, describePromotion, autoDescribePromotion } from './app.js';
+import {
+  initShell, api, getConfig, toast, esc,
+  describePromotion, autoDescribePromotion, promotionCondition, promotionReward, promotionCap,
+} from './app.js';
 import { mapsLink } from './map.js';
 
 const TOKEN_KEY = 'fallah.adminToken';
@@ -281,7 +284,7 @@ function renderProducts() {
             p.farmer ? ` · ${esc(p.farmer)}` : ''
           }</small>
         </td>
-        <td><input type="number" data-price value="${p.price}" min="100" max="1000000" step="100"
+        <td><input type="number" data-price value="${p.price / 1000}" min="0.1" max="1000" step="0.001"
                    aria-label="${esc(t('admin.pPrice'))}"></td>
         <td><input type="number" data-stock value="${p.stock}" min="0" max="100000" step="0.5"
                    aria-label="${esc(t('admin.pStock'))}"></td>
@@ -329,7 +332,7 @@ productsBody.addEventListener('click', async (event) => {
     method: 'PATCH',
     token,
     body: {
-      price: Number(row.querySelector('[data-price]').value),
+      price: Math.round(Number(row.querySelector('[data-price]').value) * 1000),
       stock: Number(row.querySelector('[data-stock]').value),
       isAvailable: row.querySelector('[data-available]').checked,
     },
@@ -433,7 +436,7 @@ function openProductDialog(product = null) {
   f.description.value = product?.description || '';
   f.category.value = product?.category || productCategories[0];
   f.unit.value = product?.unit || 'kg';
-  f.price.value = product?.price ?? 2000;
+  f.price.value = (product?.price ?? 2000) / 1000;
   f.stock.value = product?.stock ?? 50;
   f.step.value = product?.step ?? 0.5;
   f.min.value = product?.min ?? 1;
@@ -480,7 +483,7 @@ productForm.addEventListener('submit', async (event) => {
     name: data.get('name'), description: data.get('description'),
     farmer: data.get('farmer'), region: data.get('region'), harvested: data.get('harvested'),
     category: data.get('category'), unit: data.get('unit'), icon: chosenIcon,
-    price: Number(data.get('price')), stock: Number(data.get('stock')),
+    price: Math.round(Number(data.get('price')) * 1000), stock: Number(data.get('stock')),
     step: Number(data.get('step')), min: Number(data.get('min')), max: Number(data.get('max')),
     isBio: productForm.elements.isBio.checked,
     isAvailable: productForm.elements.isAvailable.checked,
@@ -543,8 +546,8 @@ let settings = null;
 
 function renderSettings() {
   if (!settings) return;
-  settingsForm.elements.delivery.value = settings.delivery;
-  settingsForm.elements.freeDeliveryFrom.value = settings.freeDeliveryFrom;
+  settingsForm.elements.delivery.value = settings.delivery / 1000;
+  settingsForm.elements.freeDeliveryFrom.value = settings.freeDeliveryFrom / 1000;
   settingsForm.elements.alwaysFree.checked = Boolean(settings.alwaysFree);
   settingsForm.elements.announcementActive.checked = Boolean(settings.announcementActive);
   settingsForm.elements.announcementTitle.value = settings.announcementTitle || '';
@@ -590,8 +593,8 @@ settingsForm.addEventListener('submit', async (event) => {
     method: 'PATCH',
     token,
     body: {
-      delivery: Number(settingsForm.elements.delivery.value),
-      freeDeliveryFrom: Number(settingsForm.elements.freeDeliveryFrom.value),
+      delivery: Math.round(Number(settingsForm.elements.delivery.value) * 1000),
+      freeDeliveryFrom: Math.round(Number(settingsForm.elements.freeDeliveryFrom.value) * 1000),
       alwaysFree: settingsForm.elements.alwaysFree.checked,
       announcementActive: settingsForm.elements.announcementActive.checked,
       announcementTitle: settingsForm.elements.announcementTitle.value,
@@ -644,7 +647,7 @@ async function loadSettings() {
 const promoBody = document.getElementById('promotions-body');
 const promoDialog = document.getElementById('promo-dialog');
 const promoForm = document.getElementById('promo-form');
-const promoPreview = document.getElementById('promo-preview');
+const promoRule = document.getElementById('promo-rule');
 const rewardProductsBox = document.getElementById('promo-reward-products');
 
 let promotions = [];
@@ -739,13 +742,24 @@ function fillProductSelect(id, selected) {
  * Cases à cocher des produits remisés : une offre peut en couvrir plusieurs,
  * et ils sont indépendants du produit qui déclenche l'offre.
  */
+/** Produit de référence déjà signalé dans la liste (-1 = liste jamais rendue). */
+let markedReferenceId = -1;
+
 function renderRewardProducts(selected = []) {
   const chosen = new Set(selected);
+  /* Le produit de référence est signalé dans la liste : le vendeur voit d'un
+   * coup d'œil s'il remise le produit qu'il exige, ou bien un autre. */
+  const referenceId = promoForm.elements.triggerType.value === 'product'
+    ? Number(promoForm.elements.triggerProductId.value)
+    : 0;
+  markedReferenceId = referenceId;
+
   rewardProductsBox.innerHTML = promoProducts
     .map(
-      (p) => `<label class="product-picker__item">
+      (p) => `<label class="product-picker__item${p.id === referenceId ? ' is-reference' : ''}">
         <input type="checkbox" data-reward-product="${p.id}" ${chosen.has(p.id) ? 'checked' : ''}>
         <span>${esc(p.name)}</span>
+        ${p.id === referenceId ? `<em class="product-picker__tag">${esc(t('promo.referenceTag'))}</em>` : ''}
       </label>`
     )
     .join('');
@@ -773,19 +787,52 @@ function togglePromoFields() {
       (!wantsScope || wantsScope.split(' ').includes(scope));
     field.hidden = !visible;
   }
-  renderPromoPreview();
+  /* Le badge « référence » suit le produit choisi à l'étape 1. On ne redessine
+   * la liste que si ce produit a changé : la redessiner à chaque frappe
+   * ferait perdre le focus de la case qu'on vient de cocher. */
+  const referenceId = promoForm.elements.triggerType.value === 'product'
+    ? Number(promoForm.elements.triggerProductId.value)
+    : 0;
+  if (referenceId !== markedReferenceId) renderRewardProducts(selectedRewardProducts());
+  renderPromoRule();
 }
 
 /**
- * Phrase que verra le client, mise à jour à chaque frappe. Le champ libre sert
- * de texte final ; laissé vide, la phrase est composée automatiquement et
- * proposée en filigrane pour que le vendeur puisse la reprendre.
+ * Ce qui sera réellement calculé, écrit noir sur blanc : à gauche le produit
+ * de référence (celui qu'il faut acheter), à droite la remise obtenue. Le
+ * texte libre est affiché en dessous, séparément — s'il raconte autre chose
+ * que la règle, l'écart saute aux yeux au lieu de passer inaperçu.
  */
-function renderPromoPreview() {
+function renderPromoRule() {
   const promo = promoFromForm();
   const auto = autoDescribePromotion(promo);
   promoForm.elements.description.placeholder = auto;
-  promoPreview.innerHTML = `${icon('tag')}<span>${esc(describePromotion(promo))}</span>`;
+
+  const reward = [promotionReward(promo), promotionCap(promo)].filter(Boolean).join(' — ');
+  const custom = promo.description.trim();
+  // Une remise sur produits sans aucun produit coché ne s'appliquerait jamais.
+  const missingProducts = promo.rewardScope === 'product'
+    && promo.rewardType !== 'free_delivery'
+    && promo.rewardProductIds.length === 0;
+
+  promoRule.innerHTML = `
+    <div class="promo-rule__title">${icon('info')}<span>${esc(t('promo.ruleTitle'))}</span></div>
+    <div class="promo-rule__flow">
+      <div class="promo-rule__side">
+        <span class="promo-rule__key">${esc(t('promo.ruleCondition'))}</span>
+        <strong>${esc(promotionCondition(promo))}</strong>
+      </div>
+      <span class="promo-rule__sep" aria-hidden="true"></span>
+      <div class="promo-rule__side">
+        <span class="promo-rule__key">${esc(t('promo.ruleReward'))}</span>
+        <strong>${missingProducts ? esc(t('promo.ruleNoProducts')) : esc(reward)}</strong>
+      </div>
+    </div>
+    <div class="promo-rule__customer">
+      <span class="promo-rule__key">${esc(t('promo.ruleCustomer'))}</span>
+      <span>${esc(custom || auto)}</span>
+      ${custom ? `<em class="promo-rule__warn">${esc(t('promo.ruleCustomWarn'))}</em>` : ''}
+    </div>`;
 }
 
 /** Lit le formulaire sous la forme attendue par l'API et par describePromotion. */
@@ -802,12 +849,12 @@ function promoFromForm() {
     triggerType: f.triggerType.value,
     triggerProductId,
     triggerQty: Number(f.triggerQty.value) || 0,
-    triggerAmount: Number(f.triggerAmount.value) || 0,
+    triggerAmount: Math.round(Number(f.triggerAmount.value) * 1000) || 0,
     rewardType: f.rewardType.value,
     rewardScope: f.rewardScope.value,
     rewardProductIds,
     rewardPercent: Number(f.rewardPercent.value) || 0,
-    rewardAmount: Number(f.rewardAmount.value) || 0,
+    rewardAmount: Math.round(Number(f.rewardAmount.value) * 1000) || 0,
     rewardMaxQty: Number(f.rewardMaxQty.value) || 0,
     triggerProduct: find(triggerProductId),
     rewardProducts: rewardProductIds.map(find).filter(Boolean),
@@ -831,6 +878,7 @@ function openPromoDialog(promo = null) {
   fillProductSelect('promo-trigger-product', promo?.triggerProductId ?? promoProducts[0]?.id);
   /* Sur une nouvelle offre, on ne coche aucun produit : le vendeur choisit
    * lui-même ceux qui sont remisés, qui sont rarement le produit déclencheur. */
+  markedReferenceId = -1;
   renderRewardProducts(promo?.rewardProductIds ?? []);
 
   document.getElementById('promo-dialog-title').textContent = t(promo ? 'promo.edit' : 'promo.new');
@@ -838,9 +886,9 @@ function openPromoDialog(promo = null) {
   f.title.value = promo?.title || '';
   f.description.value = promo?.description || '';
   f.triggerQty.value = promo?.triggerQty || 1;
-  f.triggerAmount.value = promo?.triggerAmount ?? 50000;
+  f.triggerAmount.value = (promo?.triggerAmount ?? 50000) / 1000;
   f.rewardPercent.value = promo?.rewardPercent || 10;
-  f.rewardAmount.value = promo?.rewardAmount || 1000;
+  f.rewardAmount.value = (promo?.rewardAmount || 1000) / 1000;
   f.rewardMaxQty.value = promo?.rewardMaxQty || 0;
   f.active.checked = promo ? Boolean(promo.active) : true;
 

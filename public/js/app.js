@@ -188,27 +188,57 @@ export function cartSummary(config) {
 const listNames = (products) => products.map((p) => p.name).join(t('promo.listSeparator'));
 
 /**
+ * L'avantage seul : « خصم 20% على بصل وثوم ». Sert à la fois à la phrase
+ * montrée au client et au récapitulatif du tableau de bord, pour que les deux
+ * ne puissent pas diverger.
+ */
+export function promotionReward(promo) {
+  const names = listNames(promo.rewardProducts || []);
+  if (promo.rewardType === 'free_delivery') return t('promo.rewardFreeDelivery');
+  if (promo.rewardType === 'percent') {
+    return promo.rewardScope === 'cart'
+      ? t('promo.rewardPercentCart', { percent: promo.rewardPercent })
+      : t('promo.rewardPercentProduct', { percent: promo.rewardPercent, product: names });
+  }
+  return promo.rewardScope === 'cart'
+    ? t('promo.rewardAmountCart', { amount: money(promo.rewardAmount) })
+    : t('promo.rewardAmountProduct', { amount: money(promo.rewardAmount), product: names });
+}
+
+/**
+ * Le plafond de quantité change ce que le client reçoit : il doit rester
+ * visible. L'unité est celle du premier produit remisé.
+ */
+export function promotionCap(promo) {
+  const first = (promo.rewardProducts || [])[0];
+  return promo.rewardType === 'percent' && promo.rewardMaxQty > 0 && first
+    ? t('promo.rewardCap', { qty: qtyLabel(promo.rewardMaxQty, first.unit) })
+    : '';
+}
+
+/**
+ * La condition seule, formulée pour le vendeur : « شراء 5 كغ من طماطم ».
+ * C'est le produit de référence — celui qu'il faut acheter, pas celui qui est
+ * remisé.
+ */
+export function promotionCondition(promo) {
+  if (promo.triggerType === 'product') {
+    if (!promo.triggerProduct) return t('promo.condProductMissing');
+    return t('promo.condProduct', {
+      qty: qtyLabel(promo.triggerQty, promo.triggerProduct.unit),
+      product: promo.triggerProduct.name,
+    });
+  }
+  if (promo.triggerType === 'subtotal') return t('promo.condSubtotal', { amount: money(promo.triggerAmount) });
+  return t('promo.condAlways');
+}
+
+/**
  * Phrase composée automatiquement à partir des réglages de la promotion :
  * « خصم 20% على الثوم — عند شراء 2 كغ من الطماطم ».
  * La condition n'est mentionnée que lorsqu'il y en a une.
  */
 export function autoDescribePromotion(promo) {
-  const rewardProducts = promo.rewardProducts || [];
-  const names = listNames(rewardProducts);
-
-  let reward;
-  if (promo.rewardType === 'free_delivery') {
-    reward = t('promo.rewardFreeDelivery');
-  } else if (promo.rewardType === 'percent') {
-    reward = promo.rewardScope === 'cart'
-      ? t('promo.rewardPercentCart', { percent: promo.rewardPercent })
-      : t('promo.rewardPercentProduct', { percent: promo.rewardPercent, product: names });
-  } else {
-    reward = promo.rewardScope === 'cart'
-      ? t('promo.rewardAmountCart', { amount: money(promo.rewardAmount) })
-      : t('promo.rewardAmountProduct', { amount: money(promo.rewardAmount), product: names });
-  }
-
   let condition = '';
   if (promo.triggerType === 'product' && promo.triggerProduct) {
     condition = t('promo.triggerProduct', {
@@ -219,13 +249,7 @@ export function autoDescribePromotion(promo) {
     condition = t('promo.triggerSubtotal', { amount: money(promo.triggerAmount) });
   }
 
-  /* Un plafond de quantité change ce que le client reçoit : il doit être
-   * visible. L'unité est celle du premier produit remisé. */
-  const capped = promo.rewardType === 'percent' && promo.rewardMaxQty > 0 && rewardProducts[0]
-    ? t('promo.rewardCap', { qty: qtyLabel(promo.rewardMaxQty, rewardProducts[0].unit) })
-    : '';
-
-  return [reward, capped, condition].filter(Boolean).join(' — ');
+  return [promotionReward(promo), promotionCap(promo), condition].filter(Boolean).join(' — ');
 }
 
 /**

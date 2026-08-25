@@ -144,12 +144,12 @@
             <div class="form-grid">
               <div class="field" data-field="delivery">
                 <label class="field__label" for="s-delivery" data-i18n="admin.deliveryPrice"></label>
-                <input type="number" id="s-delivery" name="delivery" min="0" max="100000" step="100" required>
+                <input type="number" id="s-delivery" name="delivery" min="0" max="100" step="0.001" required>
                 <span class="field__error" data-error-for="delivery"></span>
               </div>
               <div class="field" data-field="freeDeliveryFrom">
                 <label class="field__label" for="s-free-from" data-i18n="admin.freeDeliveryFrom"></label>
-                <input type="number" id="s-free-from" name="freeDeliveryFrom" min="0" max="1000000" step="1000" required>
+                <input type="number" id="s-free-from" name="freeDeliveryFrom" min="0" max="1000" step="0.001" required>
                 <span class="field__error" data-error-for="freeDeliveryFrom"></span>
               </div>
             </div>
@@ -281,7 +281,7 @@
           <div class="form-grid">
             <div class="field" data-field="price">
               <label class="field__label" for="p-price" data-i18n="p.price"></label>
-              <input type="number" id="p-price" name="price" min="100" max="1000000" step="100" required
+              <input type="number" id="p-price" name="price" min="0.1" max="1000" step="0.001" required
                      aria-describedby="p-price-hint">
               <span class="field__hint" id="p-price-hint" data-i18n="p.priceHint"></span>
               <span class="field__error" data-error-for="price"></span>
@@ -387,16 +387,12 @@
           <span class="field__error" data-error-for="title"></span>
         </div>
 
-        <div class="field" data-field="description">
-          <label class="field__label" for="promo-description" data-i18n="promo.description"></label>
-          <textarea id="promo-description" name="description" maxlength="200" rows="2" dir="auto"
-                    aria-describedby="promo-description-hint"></textarea>
-          <span class="field__hint" id="promo-description-hint" data-i18n="promo.descriptionHint"></span>
-          <span class="field__error" data-error-for="description"></span>
-        </div>
+        <fieldset class="form-section promo-step">
+          <legend>
+            <span class="promo-step__num">1</span>
+            <span data-i18n="promo.stepBuy"></span>
+          </legend>
 
-        <fieldset class="form-section">
-          <legend data-i18n="promo.secTrigger"></legend>
           <div class="form-grid">
             <div class="field" data-field="triggerType">
               <label class="field__label" for="promo-trigger-type" data-i18n="promo.triggerType"></label>
@@ -406,6 +402,7 @@
             <div class="field" data-field="triggerProductId" data-when-trigger="product">
               <label class="field__label" for="promo-trigger-product" data-i18n="promo.triggerProductLabel"></label>
               <select id="promo-trigger-product" name="triggerProductId"></select>
+              <span class="field__hint" data-i18n="promo.triggerProductHint"></span>
               <span class="field__error" data-error-for="triggerProductId"></span>
             </div>
             <div class="field" data-field="triggerQty" data-when-trigger="product">
@@ -415,14 +412,22 @@
             </div>
             <div class="field" data-field="triggerAmount" data-when-trigger="subtotal">
               <label class="field__label" for="promo-trigger-amount" data-i18n="promo.triggerAmountLabel"></label>
-              <input type="number" id="promo-trigger-amount" name="triggerAmount" min="0" max="1000000" step="1000">
+              <input type="number" id="promo-trigger-amount" name="triggerAmount" min="0" max="1000" step="0.001">
               <span class="field__error" data-error-for="triggerAmount"></span>
             </div>
           </div>
         </fieldset>
 
-        <fieldset class="form-section">
-          <legend data-i18n="promo.secReward"></legend>
+        <div class="promo-flow" aria-hidden="true">
+          <span class="promo-flow__arrow"></span>
+        </div>
+
+        <fieldset class="form-section promo-step">
+          <legend>
+            <span class="promo-step__num">2</span>
+            <span data-i18n="promo.stepGet"></span>
+          </legend>
+
           <div class="form-grid">
             <div class="field" data-field="rewardType">
               <label class="field__label" for="promo-reward-type" data-i18n="promo.rewardType"></label>
@@ -441,7 +446,7 @@
             </div>
             <div class="field" data-field="rewardAmount" data-when-reward="amount">
               <label class="field__label" for="promo-reward-amount" data-i18n="promo.rewardAmountLabel"></label>
-              <input type="number" id="promo-reward-amount" name="rewardAmount" min="100" max="1000000" step="100">
+              <input type="number" id="promo-reward-amount" name="rewardAmount" min="0.1" max="1000" step="0.001">
               <span class="field__error" data-error-for="rewardAmount"></span>
             </div>
             <div class="field" data-field="rewardMaxQty" data-when-reward="percent" data-when-scope="product">
@@ -460,16 +465,27 @@
                  aria-labelledby="promo-products-label"></div>
             <span class="field__error" data-error-for="rewardProductIds"></span>
           </div>
-
-          <div class="switch-row">
-            <label class="switch">
-              <input type="checkbox" id="promo-active" name="active" checked>
-              <span data-i18n="promo.active"></span>
-            </label>
-          </div>
         </fieldset>
 
-        <div class="notice" id="promo-preview" aria-live="polite"></div>
+        <!-- Ce qui sera reellement calcule : produit de reference a gauche,
+             remise a droite. Ce bloc ne ment jamais, meme si le vendeur ecrit
+             un texte libre different. -->
+        <div class="promo-rule" id="promo-rule" aria-live="polite"></div>
+
+        <div class="field" data-field="description">
+          <label class="field__label" for="promo-description" data-i18n="promo.description"></label>
+          <textarea id="promo-description" name="description" maxlength="200" rows="2" dir="auto"
+                    aria-describedby="promo-description-hint"></textarea>
+          <span class="field__hint" id="promo-description-hint" data-i18n="promo.descriptionHint"></span>
+          <span class="field__error" data-error-for="description"></span>
+        </div>
+
+        <div class="switch-row">
+          <label class="switch">
+            <input type="checkbox" id="promo-active" name="active" checked>
+            <span data-i18n="promo.active"></span>
+          </label>
+        </div>
       </div>
 
       <footer class="dialog__foot">

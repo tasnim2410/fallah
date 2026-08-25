@@ -1,6 +1,6 @@
 /** Socle commun : appels API, panier, toasts, en-tête, animations. */
 
-import { t, lang, applyTranslations, setLang, onLangChange, money, qtyLabel } from './i18n.js';
+import { t, lang, applyTranslations, setLang, onLangChange, money, qtyLabel, dayLabel } from './i18n.js';
 import { icon, produceIcon } from './icons.js';
 import { computeDiscounts, resolveDelivery } from './promo.js';
 
@@ -274,9 +274,10 @@ export const pickupAvailable = (config) =>
 export function deliveryTiming(config) {
   const f = config?.fulfilment;
   if (!f) return '';
-  return f.dailyDelivery
-    ? t('fulfil.deliveryDaily')
-    : t('fulfil.deliveryGrouped', { days: f.deliveryDelayDays });
+  if (f.dailyDelivery) return t('fulfil.deliveryDaily');
+  return f.nextDeliveryDate
+    ? t('fulfil.nextDelivery', { date: dayLabel(f.nextDeliveryDate) })
+    : t('fulfil.nextDeliveryUnset');
 }
 
 function updateCartCount() {

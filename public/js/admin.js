@@ -553,7 +553,7 @@ function renderSettings() {
   settingsForm.elements.announcementTitle.value = settings.announcementTitle || '';
   settingsForm.elements.announcementBody.value = settings.announcementBody || '';
   settingsForm.elements.dailyDelivery.checked = Boolean(settings.dailyDelivery);
-  settingsForm.elements.deliveryDelayDays.value = settings.deliveryDelayDays ?? 3;
+  settingsForm.elements.nextDeliveryDate.value = settings.nextDeliveryDate || '';
   settingsForm.elements.deliveryNote.value = settings.deliveryNote || '';
   settingsForm.elements.pickupEnabled.checked = Boolean(settings.pickupEnabled);
   settingsForm.elements.pickupPlace.value = settings.pickupPlace || '';
@@ -565,8 +565,11 @@ function toggleSettingsFields() {
   const alwaysFree = settingsForm.elements.alwaysFree.checked;
   settingsForm.elements.delivery.disabled = alwaysFree;
   settingsForm.elements.freeDeliveryFrom.disabled = alwaysFree;
-  // Le délai de regroupement ne sert que si la livraison quotidienne est coupée.
-  document.getElementById('delay-field').hidden = settingsForm.elements.dailyDelivery.checked;
+  // La date de la prochaine tournée ne sert que si la livraison quotidienne est coupée.
+  const dailyOff = !settingsForm.elements.dailyDelivery.checked;
+  document.getElementById('delay-field').hidden = !dailyOff;
+  settingsForm.elements.nextDeliveryDate.required = dailyOff;
+  settingsForm.elements.nextDeliveryDate.min = new Date().toISOString().slice(0, 10);
 }
 
 settingsForm.addEventListener('input', () => {
@@ -600,7 +603,7 @@ settingsForm.addEventListener('submit', async (event) => {
       announcementTitle: settingsForm.elements.announcementTitle.value,
       announcementBody: settingsForm.elements.announcementBody.value,
       dailyDelivery: settingsForm.elements.dailyDelivery.checked,
-      deliveryDelayDays: Number(settingsForm.elements.deliveryDelayDays.value),
+      nextDeliveryDate: settingsForm.elements.nextDeliveryDate.value,
       deliveryNote: settingsForm.elements.deliveryNote.value,
       pickupPlace: settingsForm.elements.pickupPlace.value,
       pickupEnabled: settingsForm.elements.pickupEnabled.checked,

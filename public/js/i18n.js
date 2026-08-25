@@ -193,8 +193,7 @@ export const DICT = {
     'admin.freeDeliveryFrom': 'التوصيل مجّاني ابتداءً من (بالدينار)',
     'admin.alwaysFree': 'التوصيل مجّاني دائمًا، مهما كان مجموع الطلب',
     'admin.dailyDelivery': 'التوصيل اليومي مفعَّل',
-    'admin.delayDays': 'التوصيل مجمَّع كلّ (بالأيام)',
-    'admin.delayDaysHint': 'عند إيقاف التوصيل اليومي، تُجمَّع الطلبات وتُوصَّل بعد هذه المدّة.',
+    'admin.nextDeliveryDate': 'تاريخ التوصيل القادم',
     'admin.deliveryNote': 'ملاحظة حول التوصيل (تظهر للزبون)',
     'admin.deliveryNotePh': 'مثال: التوصيل هذا الأسبوع يوم السبت فقط.',
     'admin.secPickup': 'الاستلام من المتجر',
@@ -282,7 +281,8 @@ export const DICT = {
     'fulfil.pickupFree': 'بدون مصاريف',
     'fulfil.pickupAt': 'تستلم طلبك من: {place}',
     'fulfil.deliveryDaily': 'التوصيل في نفس اليوم أو اليوم الموالي',
-    'fulfil.deliveryGrouped': 'التوصيل مجمَّع كلّ {days} أيام',
+    'fulfil.nextDelivery': 'التوصيل القادم: {date}',
+    'fulfil.nextDeliveryUnset': 'التوصيل موقوف مؤقتًا',
 
     'p.add': 'إضافة منتج',
     'p.new': 'منتج جديد',
@@ -385,7 +385,7 @@ export const DICT = {
     'err.promo_amount_invalid': 'مبلغ خصم غير صالح.',
     'err.promo_max_qty_invalid': 'كمية غير صالحة.',
     'err.promo_not_found': 'لم يعد هذا العرض موجودًا.',
-    'err.delay_days_invalid': 'عدد أيام غير صالح (من 1 إلى 30).',
+    'err.next_delivery_date_invalid': 'تاريخ غير صالح.',
     'err.pickup_place_required': 'أدخل مكان الاستلام قبل تفعيل هذا الخيار.',
     'err.pickup_unavailable': 'الاستلام من المتجر غير متاح حاليًا. اختر التوصيل.',
     'err.stock_invalid': 'كمية مخزون غير صالحة.',
@@ -589,8 +589,7 @@ export const DICT = {
     'admin.freeDeliveryFrom': 'Livraison offerte à partir de (en dinars)',
     'admin.alwaysFree': 'Livraison toujours offerte, quel que soit le montant',
     'admin.dailyDelivery': 'Livraison quotidienne active',
-    'admin.delayDays': 'Livraisons groupées tous les (jours)',
-    'admin.delayDaysHint': 'Livraison quotidienne coupée : les commandes partent groupées après ce délai.',
+    'admin.nextDeliveryDate': 'Date de la prochaine livraison',
     'admin.deliveryNote': 'Note sur la livraison (visible par le client)',
     'admin.deliveryNotePh': 'Exemple : cette semaine, livraison le samedi uniquement.',
     'admin.secPickup': 'Retrait sur place',
@@ -678,7 +677,8 @@ export const DICT = {
     'fulfil.pickupFree': 'Sans frais',
     'fulfil.pickupAt': 'À retirer à : {place}',
     'fulfil.deliveryDaily': 'Livraison le jour même ou le lendemain',
-    'fulfil.deliveryGrouped': 'Livraisons groupées tous les {days} jours',
+    'fulfil.nextDelivery': 'Prochaine livraison : {date}',
+    'fulfil.nextDeliveryUnset': 'Livraison suspendue pour le moment',
 
     'p.add': 'Ajouter un produit',
     'p.new': 'Nouveau produit',
@@ -781,7 +781,7 @@ export const DICT = {
     'err.promo_amount_invalid': 'Montant de remise invalide.',
     'err.promo_max_qty_invalid': 'Quantité invalide.',
     'err.promo_not_found': "Cette offre n'existe plus.",
-    'err.delay_days_invalid': 'Nombre de jours invalide (de 1 à 30).',
+    'err.next_delivery_date_invalid': 'Date invalide.',
     'err.pickup_place_required': "Indiquez le lieu de retrait avant d'activer cette option.",
     'err.pickup_unavailable': 'Le retrait sur place n\'est pas disponible. Choisissez la livraison.',
     'err.stock_invalid': 'Stock invalide.',
@@ -847,6 +847,15 @@ export function dateLabel(iso) {
   const d = new Date(iso);
   return d.toLocaleString(lang === 'ar' ? 'ar-TN' : 'fr-TN', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/** Date seule (sans heure) lisible dans la langue courante, ex. « samedi 30/08 ». */
+export function dayLabel(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(lang === 'ar' ? 'ar-TN' : 'fr-TN', {
+    weekday: 'long', day: '2-digit', month: '2-digit',
   });
 }
 

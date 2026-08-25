@@ -188,9 +188,9 @@ export const SHOP = {
   announcementTitle: '',
   announcementBody: '',
   /* Livraison quotidienne : quand le vendeur la coupe (trop peu de commandes),
-   * tout part groupé au bout de deliveryDelayDays jours. */
+   * il annonce la date de la prochaine tournée groupée. */
   dailyDelivery: 1,
-  deliveryDelayDays: 3,
+  nextDeliveryDate: '',
   deliveryNote: '',
   /* Retrait sur place : le client vient chercher sa commande lui-même. */
   pickupEnabled: 0,
@@ -209,9 +209,6 @@ export const TEXT_LIMITS = {
 /** Modes de remise de la commande proposés au client. */
 export const FULFILMENTS = ['delivery', 'pickup'];
 
-/** Bornes du délai de regroupement, en jours. */
-export const DELIVERY_DELAY_LIMITS = { min: 1, max: 30 };
-
 /** Bornes des réglages modifiables par le vendeur (en millimes). */
 export const SHOP_LIMITS = {
   deliveryMillimes: { min: 0, max: 100000 },
@@ -221,10 +218,10 @@ export const SHOP_LIMITS = {
 /** Réglages chiffrés modifiables depuis le tableau de bord. */
 const NUMBER_SETTINGS = [
   'deliveryMillimes', 'freeDeliveryFromMillimes', 'deliveryAlwaysFree', 'announcementActive',
-  'dailyDelivery', 'deliveryDelayDays', 'pickupEnabled',
+  'dailyDelivery', 'pickupEnabled',
 ];
-/** Réglages en texte libre (annonce, note de livraison, lieu de retrait). */
-const TEXT_SETTINGS = ['announcementTitle', 'announcementBody', 'deliveryNote', 'pickupPlace'];
+/** Réglages en texte libre (annonce, note de livraison, lieu de retrait, date de la prochaine tournée). */
+const TEXT_SETTINGS = ['announcementTitle', 'announcementBody', 'deliveryNote', 'pickupPlace', 'nextDeliveryDate'];
 /** Réglages vrai/faux, exposés comme des booléens. */
 const FLAG_SETTINGS = ['deliveryAlwaysFree', 'announcementActive', 'dailyDelivery', 'pickupEnabled'];
 

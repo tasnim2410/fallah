@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import {
   db, ORDER_STATUSES, PRODUCT_CATEGORIES, PRODUCT_UNITS, PRODUCT_ICONS,
-  SHOP, SHOP_LIMITS, TEXT_LIMITS, FULFILMENTS, DELIVERY_DELAY_LIMITS, UPLOADS_DIR,
+  SHOP, SHOP_LIMITS, TEXT_LIMITS, FULFILMENTS, UPLOADS_DIR,
   nextOrderReference, shopSettings, saveShopSettings, listPromotions, promotionFromRow,
 } from './db.js';
 import { seedProducts } from './seed.js';
@@ -355,7 +355,7 @@ function getConfig(res) {
     // Comment le client peut recevoir sa commande.
     fulfilment: {
       dailyDelivery: shop.dailyDelivery,
-      deliveryDelayDays: shop.deliveryDelayDays,
+      nextDeliveryDate: shop.nextDeliveryDate,
       deliveryNote: shop.deliveryNote,
       pickupEnabled: shop.pickupEnabled,
       pickupPlace: shop.pickupPlace,
@@ -581,7 +581,7 @@ const shopPayload = () => {
       announcementTitle: shop.announcementTitle,
       announcementBody: shop.announcementBody,
       dailyDelivery: shop.dailyDelivery,
-      deliveryDelayDays: shop.deliveryDelayDays,
+      nextDeliveryDate: shop.nextDeliveryDate,
       deliveryNote: shop.deliveryNote,
       pickupEnabled: shop.pickupEnabled,
       pickupPlace: shop.pickupPlace,
@@ -589,7 +589,6 @@ const shopPayload = () => {
     limits: {
       delivery: SHOP_LIMITS.deliveryMillimes,
       freeDeliveryFrom: SHOP_LIMITS.freeDeliveryFromMillimes,
-      deliveryDelayDays: DELIVERY_DELAY_LIMITS,
     },
   };
 };
@@ -643,12 +642,12 @@ async function adminUpdateSettings(req, res) {
   if (body?.dailyDelivery !== undefined) {
     values.dailyDelivery = body.dailyDelivery ? 1 : 0;
   }
-  if (body?.deliveryDelayDays !== undefined) {
-    const days = Number(body.deliveryDelayDays);
-    if (!Number.isInteger(days) || days < DELIVERY_DELAY_LIMITS.min || days > DELIVERY_DELAY_LIMITS.max) {
-      return fail(res, 400, 'delay_days_invalid', 'deliveryDelayDays');
+  if (body?.nextDeliveryDate !== undefined) {
+    const raw = String(body.nextDeliveryDate || '').trim();
+    if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return fail(res, 400, 'next_delivery_date_invalid', 'nextDeliveryDate');
     }
-    values.deliveryDelayDays = days;
+    values.nextDeliveryDate = raw;
   }
   if (body?.deliveryNote !== undefined) {
     values.deliveryNote = cleanAnnouncement(body.deliveryNote, TEXT_LIMITS.deliveryNote, true);

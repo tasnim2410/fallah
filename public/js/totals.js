@@ -8,11 +8,12 @@
 import { t, money } from './i18n.js';
 import { esc } from './app.js';
 
-export function totalsMarkup(summary, config) {
+export function totalsMarkup(summary, config, { pickup = false } = {}) {
   /* Le rappel « encore X pour la livraison offerte » n'a de sens que si la
-   * livraison est encore payante — sinon le client l'a déjà gagnée. */
+   * livraison est encore payante — sinon le client l'a déjà gagnée, et au
+   * retrait sur place il n'y a pas de livraison du tout. */
   const missing =
-    config && !config.deliveryAlwaysFree && !summary.freeDelivery && summary.delivery > 0
+    config && !pickup && !config.deliveryAlwaysFree && !summary.freeDelivery && summary.delivery > 0
       ? config.freeDeliveryFrom - summary.subtotal
       : 0;
 
@@ -28,8 +29,10 @@ export function totalsMarkup(summary, config) {
   return `
     <div class="totals__row"><span>${esc(t('cart.subtotal'))}</span><span>${esc(money(summary.subtotal))}</span></div>
     ${discountRows}
-    <div class="totals__row"><span>${esc(t('cart.delivery'))}</span>
-      <span>${summary.delivery === 0 ? esc(t('cart.deliveryFree')) : esc(money(summary.delivery))}</span></div>
+    <div class="totals__row"><span>${esc(t(pickup ? 'fulfil.pickup' : 'cart.delivery'))}</span>
+      <span>${pickup
+        ? esc(t('fulfil.pickupFree'))
+        : summary.delivery === 0 ? esc(t('cart.deliveryFree')) : esc(money(summary.delivery))}</span></div>
     ${missing > 0 ? `<div class="totals__row totals__row--free"><span>${esc(t('cart.freeHint', { amount: money(missing) }))}</span></div>` : ''}
     <div class="totals__row totals__row--grand"><span>${esc(t('cart.total'))}</span>
       <span>${esc(money(summary.total))}</span></div>

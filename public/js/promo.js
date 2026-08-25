@@ -9,9 +9,12 @@
  *   product  → le panier contient au moins {triggerQty} de {triggerProductId}
  *   subtotal → le sous-total atteint {triggerAmount}
  * puis :
- *   percent        → X % sur un produit, ou sur toutes les lignes
- *   amount         → montant fixe sur un produit, ou sur le total
+ *   percent        → X % sur un ou plusieurs produits, ou sur toutes les lignes
+ *   amount         → montant fixe sur un ou plusieurs produits, ou sur le total
  *   free_delivery  → livraison offerte
+ *
+ * Le produit qui déclenche et ceux qui sont remisés sont indépendants : c'est
+ * ce qui permet « 5 kg de tomates achetés → 20 % sur l'ail et les oignons ».
  */
 
 export const TRIGGER_TYPES = ['always', 'product', 'subtotal'];
@@ -74,9 +77,10 @@ export function computeDiscounts(lines, promotions) {
       continue;
     }
 
+    const rewarded = new Set(promo.rewardProductIds || []);
     const targets = promo.rewardScope === 'cart'
       ? lines
-      : lines.filter((line) => line.productId === promo.rewardProductId);
+      : lines.filter((line) => rewarded.has(line.productId));
 
     for (const line of targets) {
       const amount = lineReward(promo, line);

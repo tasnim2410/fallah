@@ -597,6 +597,34 @@ input::placeholder, textarea::placeholder { color: #9aa8a0; }
 .radio-card:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
 .radio-card:has(input:focus-visible) { outline: 3px solid var(--primary); outline-offset: 2px; }
 
+/* Choix livraison / retrait : une ligne par option, avec son détail. */
+.radio-row--stack { grid-template-columns: 1fr; }
+.radio-row--stack .radio-card { align-items: flex-start; }
+.radio-card__detail { display: block; margin-block-start: 2px; font-weight: 400; color: var(--muted-fg); }
+
+/* Liste des produits remisés dans la fiche offre. */
+.product-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-1);
+  max-height: 190px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-alt);
+}
+.product-picker__item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  font-size: .9rem;
+}
+.product-picker__item:hover { background: var(--primary-soft); }
+.product-picker__item:has(input:checked) { background: var(--primary-soft); font-weight: 600; }
+.product-picker__item input { accent-color: var(--primary); flex: none; }
+
 /* ---------------- Cartes / panneaux ---------------- */
 
 .panel {

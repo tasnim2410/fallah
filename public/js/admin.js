@@ -2,7 +2,7 @@
 
 import { t, pick, money, qtyLabel, dateLabel, onLangChange } from './i18n.js';
 import { icon, produceIcon } from './icons.js';
-import { initShell, api, getConfig, toast, esc, describePromotion } from './app.js';
+import { initShell, api, getConfig, toast, esc, describePromotion, autoDescribePromotion } from './app.js';
 import { mapsLink } from './map.js';
 
 const TOKEN_KEY = 'fallah.adminToken';
@@ -150,6 +150,8 @@ function orderCard(order) {
         <div class="order-card__field"><span>${esc(t('admin.customer'))}</span>${esc(order.customerName)}</div>
         <div class="order-card__field"><span>${esc(t('admin.phone'))}</span>
           <a href="tel:+216${esc(order.phone)}" dir="ltr">${esc(order.phone)}</a></div>
+        <div class="order-card__field"><span>${esc(t('fulfil.title'))}</span>
+          <strong>${esc(t(order.fulfilment === 'pickup' ? 'fulfil.pickup' : 'fulfil.delivery'))}</strong></div>
         <div class="order-card__field"><span>${esc(t('admin.time'))}</span>${esc(t(`form.time${order.preferredTime[0].toUpperCase()}${order.preferredTime.slice(1)}`))}</div>
         <div class="order-card__field"><span>${esc(t('admin.address'))}</span>
           ${esc(governorateLabel(order.governorate))} — ${esc(order.address)}</div>
@@ -547,6 +549,11 @@ function renderSettings() {
   settingsForm.elements.announcementActive.checked = Boolean(settings.announcementActive);
   settingsForm.elements.announcementTitle.value = settings.announcementTitle || '';
   settingsForm.elements.announcementBody.value = settings.announcementBody || '';
+  settingsForm.elements.dailyDelivery.checked = Boolean(settings.dailyDelivery);
+  settingsForm.elements.deliveryDelayDays.value = settings.deliveryDelayDays ?? 3;
+  settingsForm.elements.deliveryNote.value = settings.deliveryNote || '';
+  settingsForm.elements.pickupEnabled.checked = Boolean(settings.pickupEnabled);
+  settingsForm.elements.pickupPlace.value = settings.pickupPlace || '';
   toggleSettingsFields();
 }
 
@@ -555,6 +562,8 @@ function toggleSettingsFields() {
   const alwaysFree = settingsForm.elements.alwaysFree.checked;
   settingsForm.elements.delivery.disabled = alwaysFree;
   settingsForm.elements.freeDeliveryFrom.disabled = alwaysFree;
+  // Le délai de regroupement ne sert que si la livraison quotidienne est coupée.
+  document.getElementById('delay-field').hidden = settingsForm.elements.dailyDelivery.checked;
 }
 
 settingsForm.addEventListener('input', () => {
@@ -587,6 +596,11 @@ settingsForm.addEventListener('submit', async (event) => {
       announcementActive: settingsForm.elements.announcementActive.checked,
       announcementTitle: settingsForm.elements.announcementTitle.value,
       announcementBody: settingsForm.elements.announcementBody.value,
+      dailyDelivery: settingsForm.elements.dailyDelivery.checked,
+      deliveryDelayDays: Number(settingsForm.elements.deliveryDelayDays.value),
+      deliveryNote: settingsForm.elements.deliveryNote.value,
+      pickupPlace: settingsForm.elements.pickupPlace.value,
+      pickupEnabled: settingsForm.elements.pickupEnabled.checked,
     },
   });
 
@@ -631,6 +645,7 @@ const promoBody = document.getElementById('promotions-body');
 const promoDialog = document.getElementById('promo-dialog');
 const promoForm = document.getElementById('promo-form');
 const promoPreview = document.getElementById('promo-preview');
+const rewardProductsBox = document.getElementById('promo-reward-products');
 
 let promotions = [];
 /** Listes de référence renvoyées avec les offres. */
@@ -720,6 +735,27 @@ function fillProductSelect(id, selected) {
     .join('');
 }
 
+/**
+ * Cases à cocher des produits remisés : une offre peut en couvrir plusieurs,
+ * et ils sont indépendants du produit qui déclenche l'offre.
+ */
+function renderRewardProducts(selected = []) {
+  const chosen = new Set(selected);
+  rewardProductsBox.innerHTML = promoProducts
+    .map(
+      (p) => `<label class="product-picker__item">
+        <input type="checkbox" data-reward-product="${p.id}" ${chosen.has(p.id) ? 'checked' : ''}>
+        <span>${esc(p.name)}</span>
+      </label>`
+    )
+    .join('');
+}
+
+const selectedRewardProducts = () =>
+  [...rewardProductsBox.querySelectorAll('[data-reward-product]')]
+    .filter((box) => box.checked)
+    .map((box) => Number(box.dataset.rewardProduct));
+
 /** N'affiche que les champs utiles au couple déclencheur / récompense choisi. */
 function togglePromoFields() {
   const trigger = promoForm.elements.triggerType.value;
@@ -740,20 +776,28 @@ function togglePromoFields() {
   renderPromoPreview();
 }
 
-/** Phrase que verra le client, mise à jour à chaque frappe. */
+/**
+ * Phrase que verra le client, mise à jour à chaque frappe. Le champ libre sert
+ * de texte final ; laissé vide, la phrase est composée automatiquement et
+ * proposée en filigrane pour que le vendeur puisse la reprendre.
+ */
 function renderPromoPreview() {
-  promoPreview.innerHTML = `${icon('tag')}<span>${esc(describePromotion(promoFromForm()))}</span>`;
+  const promo = promoFromForm();
+  const auto = autoDescribePromotion(promo);
+  promoForm.elements.description.placeholder = auto;
+  promoPreview.innerHTML = `${icon('tag')}<span>${esc(describePromotion(promo))}</span>`;
 }
 
 /** Lit le formulaire sous la forme attendue par l'API et par describePromotion. */
 function promoFromForm() {
   const f = promoForm.elements;
   const triggerProductId = Number(f.triggerProductId.value) || null;
-  const rewardProductId = Number(f.rewardProductId.value) || null;
+  const rewardProductIds = selectedRewardProducts();
   const find = (id) => promoProducts.find((p) => p.id === id) || null;
 
   return {
     title: f.title.value.trim(),
+    description: f.description.value.trim(),
     active: f.active.checked,
     triggerType: f.triggerType.value,
     triggerProductId,
@@ -761,12 +805,12 @@ function promoFromForm() {
     triggerAmount: Number(f.triggerAmount.value) || 0,
     rewardType: f.rewardType.value,
     rewardScope: f.rewardScope.value,
-    rewardProductId,
+    rewardProductIds,
     rewardPercent: Number(f.rewardPercent.value) || 0,
     rewardAmount: Number(f.rewardAmount.value) || 0,
     rewardMaxQty: Number(f.rewardMaxQty.value) || 0,
     triggerProduct: find(triggerProductId),
-    rewardProduct: find(rewardProductId),
+    rewardProducts: rewardProductIds.map(find).filter(Boolean),
   };
 }
 
@@ -785,11 +829,14 @@ function openPromoDialog(promo = null) {
   fillPromoSelect('promo-reward-type', promoRewards, 'promo.reward', promo?.rewardType || 'percent');
   fillPromoSelect('promo-reward-scope', promoScopes, 'promo.scope', promo?.rewardScope || 'product');
   fillProductSelect('promo-trigger-product', promo?.triggerProductId ?? promoProducts[0]?.id);
-  fillProductSelect('promo-reward-product', promo?.rewardProductId ?? promoProducts[0]?.id);
+  /* Sur une nouvelle offre, on ne coche aucun produit : le vendeur choisit
+   * lui-même ceux qui sont remisés, qui sont rarement le produit déclencheur. */
+  renderRewardProducts(promo?.rewardProductIds ?? []);
 
   document.getElementById('promo-dialog-title').textContent = t(promo ? 'promo.edit' : 'promo.new');
   const f = promoForm.elements;
   f.title.value = promo?.title || '';
+  f.description.value = promo?.description || '';
   f.triggerQty.value = promo?.triggerQty || 1;
   f.triggerAmount.value = promo?.triggerAmount ?? 50000;
   f.rewardPercent.value = promo?.rewardPercent || 10;
@@ -827,7 +874,7 @@ promoForm.addEventListener('submit', async (event) => {
   saveBtn.disabled = true;
   label.textContent = t('p.saving');
 
-  const { triggerProduct, rewardProduct, ...payload } = promoFromForm();
+  const { triggerProduct, rewardProducts, ...payload } = promoFromForm();
   const res = editingPromo
     ? await api(`/api/admin/promotions/${editingPromo.id}`, { method: 'PATCH', token, body: payload })
     : await api('/api/admin/promotions', { method: 'POST', token, body: payload });

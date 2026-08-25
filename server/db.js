@@ -70,6 +70,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS promotions (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     title                  TEXT    NOT NULL,
+    description            TEXT    NOT NULL DEFAULT '',
     is_active              INTEGER NOT NULL DEFAULT 1,
     trigger_type           TEXT    NOT NULL DEFAULT 'always',
     trigger_product_id     INTEGER,
@@ -77,7 +78,7 @@ db.exec(`
     trigger_amount_millimes INTEGER NOT NULL DEFAULT 0,
     reward_type            TEXT    NOT NULL DEFAULT 'percent',
     reward_scope           TEXT    NOT NULL DEFAULT 'product',
-    reward_product_id      INTEGER,
+    reward_product_ids     TEXT    NOT NULL DEFAULT '[]',
     reward_percent         REAL    NOT NULL DEFAULT 0,
     reward_amount_millimes INTEGER NOT NULL DEFAULT 0,
     reward_max_qty         REAL    NOT NULL DEFAULT 0,
@@ -124,13 +125,35 @@ function mergeBilingualColumn(table, arColumn, frColumn, newColumn) {
   if (existing.has(frColumn)) db.exec(`ALTER TABLE ${table} DROP COLUMN ${frColumn}`);
 }
 
+/**
+ * Une promotion ne visait qu'un seul produit ; elle peut désormais en couvrir
+ * plusieurs. On recopie l'ancienne colonne dans la nouvelle liste, une fois.
+ */
+function migrateRewardProductIds() {
+  const columns = new Set(db.prepare('PRAGMA table_info(promotions)').all().map((c) => c.name));
+  if (!columns.has('reward_product_id')) return;
+
+  const rows = db.prepare(`SELECT id, reward_product_id FROM promotions WHERE reward_product_ids = '[]'`).all();
+  const update = db.prepare('UPDATE promotions SET reward_product_ids = ? WHERE id = ?');
+  for (const row of rows) {
+    if (row.reward_product_id) update.run(JSON.stringify([row.reward_product_id]), row.id);
+  }
+  db.exec('ALTER TABLE promotions DROP COLUMN reward_product_id');
+}
+
 addMissingColumns('products', { image_path: `TEXT NOT NULL DEFAULT ''` });
 // Point posé sur la carte au moment de la commande (facultatif, donc nullable).
 addMissingColumns('orders', { lat: 'REAL', lng: 'REAL' });
 addMissingColumns('orders', {
   discount_millimes: 'INTEGER NOT NULL DEFAULT 0',
   discounts_json: `TEXT NOT NULL DEFAULT '[]'`,
+  fulfilment: `TEXT NOT NULL DEFAULT 'delivery'`,
 });
+addMissingColumns('promotions', {
+  description: `TEXT NOT NULL DEFAULT ''`,
+  reward_product_ids: `TEXT NOT NULL DEFAULT '[]'`,
+});
+migrateRewardProductIds();
 mergeBilingualColumn('products', 'name_ar', 'name_fr', 'name');
 mergeBilingualColumn('products', 'desc_ar', 'desc_fr', 'description');
 mergeBilingualColumn('products', 'farmer_ar', 'farmer_fr', 'farmer');
@@ -164,10 +187,30 @@ export const SHOP = {
   announcementActive: 0,
   announcementTitle: '',
   announcementBody: '',
+  /* Livraison quotidienne : quand le vendeur la coupe (trop peu de commandes),
+   * tout part groupé au bout de deliveryDelayDays jours. */
+  dailyDelivery: 1,
+  deliveryDelayDays: 3,
+  deliveryNote: '',
+  /* Retrait sur place : le client vient chercher sa commande lui-même. */
+  pickupEnabled: 0,
+  pickupPlace: '',
 };
 
-/** Longueurs maximales de l'encart d'annonce. */
-export const ANNOUNCEMENT_LIMITS = { title: 80, body: 400 };
+/** Longueurs maximales des textes libres saisis par le vendeur. */
+export const TEXT_LIMITS = {
+  announcementTitle: 80,
+  announcementBody: 400,
+  deliveryNote: 200,
+  pickupPlace: 300,
+  promotionDescription: 200,
+};
+
+/** Modes de remise de la commande proposés au client. */
+export const FULFILMENTS = ['delivery', 'pickup'];
+
+/** Bornes du délai de regroupement, en jours. */
+export const DELIVERY_DELAY_LIMITS = { min: 1, max: 30 };
 
 /** Bornes des réglages modifiables par le vendeur (en millimes). */
 export const SHOP_LIMITS = {
@@ -176,9 +219,14 @@ export const SHOP_LIMITS = {
 };
 
 /** Réglages chiffrés modifiables depuis le tableau de bord. */
-const NUMBER_SETTINGS = ['deliveryMillimes', 'freeDeliveryFromMillimes', 'deliveryAlwaysFree', 'announcementActive'];
-/** Réglages en texte libre (l'encart d'annonce). */
-const TEXT_SETTINGS = ['announcementTitle', 'announcementBody'];
+const NUMBER_SETTINGS = [
+  'deliveryMillimes', 'freeDeliveryFromMillimes', 'deliveryAlwaysFree', 'announcementActive',
+  'dailyDelivery', 'deliveryDelayDays', 'pickupEnabled',
+];
+/** Réglages en texte libre (annonce, note de livraison, lieu de retrait). */
+const TEXT_SETTINGS = ['announcementTitle', 'announcementBody', 'deliveryNote', 'pickupPlace'];
+/** Réglages vrai/faux, exposés comme des booléens. */
+const FLAG_SETTINGS = ['deliveryAlwaysFree', 'announcementActive', 'dailyDelivery', 'pickupEnabled'];
 
 /**
  * Réglages en vigueur : les valeurs enregistrées par le vendeur, complétées
@@ -196,8 +244,9 @@ export function shopSettings() {
   for (const key of TEXT_SETTINGS) {
     if (typeof stored[key] === 'string') settings[key] = stored[key];
   }
-  settings.deliveryAlwaysFree = Boolean(settings.deliveryAlwaysFree);
-  settings.announcementActive = Boolean(settings.announcementActive);
+  for (const key of FLAG_SETTINGS) settings[key] = Boolean(settings[key]);
+  // Le retrait n'est proposé que si le vendeur a indiqué où venir chercher.
+  settings.pickupEnabled = settings.pickupEnabled && settings.pickupPlace.trim().length > 0;
   return settings;
 }
 
@@ -224,10 +273,21 @@ export function listPromotions({ activeOnly = false } = {}) {
   return rows.map(promotionFromRow);
 }
 
+/** Liste d'identifiants stockée en JSON : toujours renvoyée sous forme de tableau. */
+function parseIdList(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.filter((id) => Number.isInteger(id)) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function promotionFromRow(row) {
   return {
     id: row.id,
     title: row.title,
+    description: row.description || '',
     active: Boolean(row.is_active),
     triggerType: row.trigger_type,
     triggerProductId: row.trigger_product_id,
@@ -235,7 +295,7 @@ export function promotionFromRow(row) {
     triggerAmount: row.trigger_amount_millimes,
     rewardType: row.reward_type,
     rewardScope: row.reward_scope,
-    rewardProductId: row.reward_product_id,
+    rewardProductIds: parseIdList(row.reward_product_ids),
     rewardPercent: row.reward_percent,
     rewardAmount: row.reward_amount_millimes,
     rewardMaxQty: row.reward_max_qty,

@@ -76,7 +76,20 @@
               </div>
             </div>
 
-            <div class="panel">
+            <!-- Livraison ou retrait sur place : masque l'adresse si le client vient. -->
+            <div class="panel" id="fulfilment-panel" hidden>
+              <h2 class="panel__title">
+                <span data-icon="truck"></span>
+                <span data-i18n="fulfil.title"></span>
+              </h2>
+              <div class="field" data-field="fulfilment">
+                <div class="radio-row radio-row--stack" role="radiogroup" data-i18n-aria="fulfil.title"
+                     id="fulfilment-choice"></div>
+                <span class="field__error" data-error-for="fulfilment"></span>
+              </div>
+            </div>
+
+            <div class="panel" id="address-panel">
               <h2 class="panel__title">
                 <span data-icon="pin"></span>
                 <span data-i18n="form.address"></span>

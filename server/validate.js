@@ -57,7 +57,7 @@ function cleanText(value, max) {
  * toujours recalculés côté serveur depuis la base.
  * @returns {{ok: true, value: object} | {ok: false, field: string, code: string}}
  */
-export function validateCustomer(body) {
+export function validateCustomer(body, { pickup = false } = {}) {
   const name = cleanText(body?.name, 80);
   if (name.length < 3) return { ok: false, field: 'name', code: 'name_too_short' };
 
@@ -69,8 +69,10 @@ export function validateCustomer(body) {
     return { ok: false, field: 'governorate', code: 'governorate_invalid' };
   }
 
+  /* Au retrait sur place, il n'y a rien à livrer : l'adresse devient facultative
+   * (le client peut tout de même laisser une indication). */
   const address = cleanText(body?.address, 300);
-  if (address.length < 10) return { ok: false, field: 'address', code: 'address_too_short' };
+  if (!pickup && address.length < 10) return { ok: false, field: 'address', code: 'address_too_short' };
 
   // Le point sur la carte reste facultatif : l'adresse écrite suffit à livrer.
   const pin = normalizePin(body?.lat, body?.lng);
@@ -199,12 +201,14 @@ export function validateProduct(body, { units, categories, icons, partial = fals
  * @param {object} body données du formulaire
  * @param {{triggers: string[], rewards: string[], scopes: string[]}} options
  */
-export function validatePromotion(body, { triggers, rewards, scopes }) {
+export function validatePromotion(body, { triggers, rewards, scopes, descriptionMax = 200 }) {
   const title = cleanText(body?.title, 120);
   if (title.length < 3) return { ok: false, field: 'title', code: 'promo_title_required' };
 
   const value = {
     title,
+    // Vide = le texte montré au client est composé automatiquement.
+    description: cleanText(body?.description, descriptionMax),
     isActive: Number(body?.active === undefined ? 1 : Boolean(body.active)),
     triggerType: body?.triggerType,
     triggerProductId: null,
@@ -212,7 +216,7 @@ export function validatePromotion(body, { triggers, rewards, scopes }) {
     triggerAmount: 0,
     rewardType: body?.rewardType,
     rewardScope: 'cart',
-    rewardProductId: null,
+    rewardProductIds: [],
     rewardPercent: 0,
     rewardAmount: 0,
     rewardMaxQty: 0,
@@ -254,12 +258,20 @@ export function validatePromotion(body, { triggers, rewards, scopes }) {
   }
   value.rewardScope = body.rewardScope;
 
+  /* Une remise peut couvrir plusieurs produits à la fois : « 20 % sur l'ail
+   * et les oignons ». On dédoublonne et on refuse une liste vide. */
   if (value.rewardScope === 'product') {
-    const productId = Number(body?.rewardProductId);
-    if (!Number.isInteger(productId) || productId <= 0) {
-      return { ok: false, field: 'rewardProductId', code: 'promo_reward_product_required' };
+    const raw = Array.isArray(body?.rewardProductIds)
+      ? body.rewardProductIds
+      : [body?.rewardProductIds];
+    const ids = [...new Set(raw.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+    if (!ids.length) {
+      return { ok: false, field: 'rewardProductIds', code: 'promo_reward_product_required' };
     }
-    value.rewardProductId = productId;
+    if (ids.length > 30) {
+      return { ok: false, field: 'rewardProductIds', code: 'promo_reward_product_required' };
+    }
+    value.rewardProductIds = ids;
   }
 
   if (value.rewardType === 'percent') {

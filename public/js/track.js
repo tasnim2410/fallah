@@ -64,8 +64,12 @@ function renderOrder(order) {
           <span>${esc(t('track.placedAt'))}</span>${esc(dateLabel(order.createdAt))}
         </div>
         <div class="order-card__field">
-          <span>${esc(t('track.deliverTo'))}</span>${esc(governorateLabel(order.governorate))}
+          <span>${esc(t('fulfil.title'))}</span>
+          ${esc(t(order.fulfilment === 'pickup' ? 'fulfil.pickup' : 'fulfil.delivery'))}
         </div>
+        ${order.fulfilment === 'pickup' ? '' : `<div class="order-card__field">
+          <span>${esc(t('track.deliverTo'))}</span>${esc(governorateLabel(order.governorate))}
+        </div>`}
         <div class="order-card__field">
           <span>${esc(t('cart.total'))}</span><strong>${esc(money(order.total))}</strong>
         </div>
@@ -80,8 +84,10 @@ function renderOrder(order) {
           )
           .join('')}
         ${orderDiscountRows(order)}
-        <li><span>${esc(t('cart.delivery'))}</span>
-            <span>${order.delivery === 0 ? esc(t('cart.deliveryFree')) : esc(money(order.delivery))}</span></li>
+        <li><span>${esc(t(order.fulfilment === 'pickup' ? 'fulfil.pickup' : 'cart.delivery'))}</span>
+            <span>${order.fulfilment === 'pickup'
+              ? esc(t('fulfil.pickupFree'))
+              : order.delivery === 0 ? esc(t('cart.deliveryFree')) : esc(money(order.delivery))}</span></li>
       </ul>
 
       <h3 style="margin-block-start: var(--space-5)">${esc(t('track.progress'))}</h3>

@@ -184,23 +184,29 @@ export function cartSummary(config) {
   };
 }
 
+/** Énumère des noms avec le séparateur de la langue courante. */
+const listNames = (products) => products.map((p) => p.name).join(t('promo.listSeparator'));
+
 /**
- * Phrase lisible décrivant une promotion : « خصم 20% على الثوم — عند شراء 2 كغ بطاطا ».
+ * Phrase composée automatiquement à partir des réglages de la promotion :
+ * « خصم 20% على الثوم — عند شراء 2 كغ من الطماطم ».
  * La condition n'est mentionnée que lorsqu'il y en a une.
  */
-export function describePromotion(promo) {
-  const rewardProduct = promo.rewardProduct?.name || '';
+export function autoDescribePromotion(promo) {
+  const rewardProducts = promo.rewardProducts || [];
+  const names = listNames(rewardProducts);
+
   let reward;
   if (promo.rewardType === 'free_delivery') {
     reward = t('promo.rewardFreeDelivery');
   } else if (promo.rewardType === 'percent') {
     reward = promo.rewardScope === 'cart'
       ? t('promo.rewardPercentCart', { percent: promo.rewardPercent })
-      : t('promo.rewardPercentProduct', { percent: promo.rewardPercent, product: rewardProduct });
+      : t('promo.rewardPercentProduct', { percent: promo.rewardPercent, product: names });
   } else {
     reward = promo.rewardScope === 'cart'
       ? t('promo.rewardAmountCart', { amount: money(promo.rewardAmount) })
-      : t('promo.rewardAmountProduct', { amount: money(promo.rewardAmount), product: rewardProduct });
+      : t('promo.rewardAmountProduct', { amount: money(promo.rewardAmount), product: names });
   }
 
   let condition = '';
@@ -213,12 +219,40 @@ export function describePromotion(promo) {
     condition = t('promo.triggerSubtotal', { amount: money(promo.triggerAmount) });
   }
 
-  // Un plafond de quantité change ce que le client reçoit : il doit être visible.
-  const capped = promo.rewardType === 'percent' && promo.rewardMaxQty > 0 && promo.rewardProduct
-    ? t('promo.rewardCap', { qty: qtyLabel(promo.rewardMaxQty, promo.rewardProduct.unit) })
+  /* Un plafond de quantité change ce que le client reçoit : il doit être
+   * visible. L'unité est celle du premier produit remisé. */
+  const capped = promo.rewardType === 'percent' && promo.rewardMaxQty > 0 && rewardProducts[0]
+    ? t('promo.rewardCap', { qty: qtyLabel(promo.rewardMaxQty, rewardProducts[0].unit) })
     : '';
 
   return [reward, capped, condition].filter(Boolean).join(' — ');
+}
+
+/**
+ * Texte montré au client. Le vendeur peut écrire le sien ; sans quoi la phrase
+ * est composée à partir des réglages de l'offre.
+ */
+export function describePromotion(promo) {
+  const custom = (promo.description || '').trim();
+  return custom || autoDescribePromotion(promo);
+}
+
+/* --------------------------- Retrait / livraison ------------------------ */
+
+/** Le retrait sur place n'est proposé que si le vendeur l'a ouvert. */
+export const pickupAvailable = (config) =>
+  Boolean(config?.fulfilment?.pickupEnabled && config.fulfilment.pickupPlace);
+
+/**
+ * Quand le client sera servi, en toutes lettres : le jour même si le vendeur
+ * livre tous les jours, sinon le regroupement annoncé.
+ */
+export function deliveryTiming(config) {
+  const f = config?.fulfilment;
+  if (!f) return '';
+  return f.dailyDelivery
+    ? t('fulfil.deliveryDaily')
+    : t('fulfil.deliveryGrouped', { days: f.deliveryDelayDays });
 }
 
 function updateCartCount() {

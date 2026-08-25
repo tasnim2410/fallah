@@ -6,8 +6,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import {
   db, ORDER_STATUSES, PRODUCT_CATEGORIES, PRODUCT_UNITS, PRODUCT_ICONS,
-  SHOP, SHOP_LIMITS, ANNOUNCEMENT_LIMITS, UPLOADS_DIR, nextOrderReference,
-  shopSettings, saveShopSettings, listPromotions, promotionFromRow,
+  SHOP, SHOP_LIMITS, TEXT_LIMITS, FULFILMENTS, DELIVERY_DELAY_LIMITS, UPLOADS_DIR,
+  nextOrderReference, shopSettings, saveShopSettings, listPromotions, promotionFromRow,
 } from './db.js';
 import { seedProducts } from './seed.js';
 import {
@@ -297,6 +297,7 @@ const publicOrder = (row) => ({
   subtotal: row.subtotal_millimes,
   discount: row.discount_millimes || 0,
   discounts: orderDiscounts(row),
+  fulfilment: row.fulfilment || 'delivery',
   delivery: row.delivery_millimes,
   total: row.total_millimes,
   governorate: row.governorate,
@@ -333,7 +334,7 @@ function promotionProduct(productId) {
 const promotionPayload = (promo) => ({
   ...promo,
   triggerProduct: promotionProduct(promo.triggerProductId),
-  rewardProduct: promotionProduct(promo.rewardProductId),
+  rewardProducts: promo.rewardProductIds.map(promotionProduct).filter(Boolean),
 });
 
 function getConfig(res) {
@@ -351,6 +352,14 @@ function getConfig(res) {
       ? { title: shop.announcementTitle, body: shop.announcementBody }
       : null,
     promotions: listPromotions({ activeOnly: true }).map(promotionPayload),
+    // Comment le client peut recevoir sa commande.
+    fulfilment: {
+      dailyDelivery: shop.dailyDelivery,
+      deliveryDelayDays: shop.deliveryDelayDays,
+      deliveryNote: shop.deliveryNote,
+      pickupEnabled: shop.pickupEnabled,
+      pickupPlace: shop.pickupPlace,
+    },
   });
 }
 
@@ -383,7 +392,17 @@ async function createOrder(req, res, ip) {
     return fail(res, 413, 'payload_too_large');
   }
 
-  const customer = validateCustomer(body?.customer);
+  /* Mode de remise choisi par le client : le retrait n'est accepté que si le
+   * vendeur l'a ouvert et a indiqué où venir chercher la commande. */
+  const shopNow = shopSettings();
+  const fulfilment = FULFILMENTS.includes(body?.customer?.fulfilment)
+    ? body.customer.fulfilment
+    : 'delivery';
+  if (fulfilment === 'pickup' && !shopNow.pickupEnabled) {
+    return fail(res, 409, 'pickup_unavailable', 'fulfilment');
+  }
+
+  const customer = validateCustomer(body?.customer, { pickup: fulfilment === 'pickup' });
   if (!customer.ok) return fail(res, 400, customer.code, customer.field);
 
   const cart = validateCartShape(body?.items, SHOP.maxItemsPerOrder);
@@ -411,21 +430,24 @@ async function createOrder(req, res, ip) {
 
   /* Remises et frais de livraison sortent tous de la base : le client peut
    * afficher ce qu'il veut, seul ce calcul-ci fixe le montant à payer. */
-  const shop = shopSettings();
+  const shop = shopNow;
   const cartLines = lines.map(({ p, qty, lineTotal }) => ({
     productId: p.id, qty, unitPrice: p.price_millimes, lineTotal,
   }));
   const promo = computeDiscounts(cartLines, listPromotions({ activeOnly: true }));
   const discount = promo.discount;
-  const delivery = resolveDelivery(
-    subtotal,
-    {
-      alwaysFree: shop.deliveryAlwaysFree,
-      freeDeliveryFrom: shop.freeDeliveryFromMillimes,
-      delivery: shop.deliveryMillimes,
-    },
-    promo.freeDelivery
-  );
+  // Rien à livrer quand le client vient chercher : pas de frais.
+  const delivery = fulfilment === 'pickup'
+    ? 0
+    : resolveDelivery(
+      subtotal,
+      {
+        alwaysFree: shop.deliveryAlwaysFree,
+        freeDeliveryFrom: shop.freeDeliveryFromMillimes,
+        delivery: shop.deliveryMillimes,
+      },
+      promo.freeDelivery
+    );
   const total = subtotal - discount + delivery;
   const now = new Date().toISOString();
   const c = customer.value;
@@ -433,8 +455,8 @@ async function createOrder(req, res, ip) {
   const insertOrder = db.prepare(`
     INSERT INTO orders (reference, customer_name, phone, governorate, address, lat, lng, note, preferred_time,
                         lang, subtotal_millimes, discount_millimes, discounts_json,
-                        delivery_millimes, total_millimes, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+                        delivery_millimes, total_millimes, fulfilment, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
   `);
   const insertItem = db.prepare(`
     INSERT INTO order_items (order_id, product_id, name, unit, qty, unit_price_millimes, line_millimes)
@@ -448,7 +470,7 @@ async function createOrder(req, res, ip) {
     reference = nextOrderReference();
     const { lastInsertRowid } = insertOrder.run(
       reference, c.name, c.phone, c.governorate, c.address, c.lat, c.lng, c.note, c.preferredTime,
-      c.lang, subtotal, discount, JSON.stringify(promo.applied), delivery, total, now, now
+      c.lang, subtotal, discount, JSON.stringify(promo.applied), delivery, total, fulfilment, now, now
     );
     for (const { p, qty, lineTotal } of lines) {
       insertItem.run(Number(lastInsertRowid), p.id, p.name, p.unit, qty, p.price_millimes, lineTotal);
@@ -464,8 +486,8 @@ async function createOrder(req, res, ip) {
   recordHit(ip);
   console.log(`[commande] ${reference} — ${c.name} (${c.phone}) — ${(total / 1000).toFixed(3)} DT — à confirmer par téléphone`);
   sendJson(res, 201, {
-    reference, status: 'pending', subtotal,
-    discount, discounts: promo.applied, delivery, total, shopPhone: SHOP_PHONE,
+    reference, status: 'pending', subtotal, discount, discounts: promo.applied,
+    delivery, total, fulfilment, shopPhone: SHOP_PHONE,
   });
 }
 
@@ -558,10 +580,16 @@ const shopPayload = () => {
       announcementActive: shop.announcementActive,
       announcementTitle: shop.announcementTitle,
       announcementBody: shop.announcementBody,
+      dailyDelivery: shop.dailyDelivery,
+      deliveryDelayDays: shop.deliveryDelayDays,
+      deliveryNote: shop.deliveryNote,
+      pickupEnabled: shop.pickupEnabled,
+      pickupPlace: shop.pickupPlace,
     },
     limits: {
       delivery: SHOP_LIMITS.deliveryMillimes,
       freeDeliveryFrom: SHOP_LIMITS.freeDeliveryFromMillimes,
+      deliveryDelayDays: DELIVERY_DELAY_LIMITS,
     },
   };
 };
@@ -607,10 +635,33 @@ async function adminUpdateSettings(req, res) {
   // L'encart d'annonce est du texte libre : on retire seulement les caracteres
   // de controle et on borne la longueur (les sauts de ligne sont conserves).
   if (body?.announcementTitle !== undefined) {
-    values.announcementTitle = cleanAnnouncement(body.announcementTitle, ANNOUNCEMENT_LIMITS.title, false);
+    values.announcementTitle = cleanAnnouncement(body.announcementTitle, TEXT_LIMITS.announcementTitle, false);
   }
   if (body?.announcementBody !== undefined) {
-    values.announcementBody = cleanAnnouncement(body.announcementBody, ANNOUNCEMENT_LIMITS.body, true);
+    values.announcementBody = cleanAnnouncement(body.announcementBody, TEXT_LIMITS.announcementBody, true);
+  }
+  if (body?.dailyDelivery !== undefined) {
+    values.dailyDelivery = body.dailyDelivery ? 1 : 0;
+  }
+  if (body?.deliveryDelayDays !== undefined) {
+    const days = Number(body.deliveryDelayDays);
+    if (!Number.isInteger(days) || days < DELIVERY_DELAY_LIMITS.min || days > DELIVERY_DELAY_LIMITS.max) {
+      return fail(res, 400, 'delay_days_invalid', 'deliveryDelayDays');
+    }
+    values.deliveryDelayDays = days;
+  }
+  if (body?.deliveryNote !== undefined) {
+    values.deliveryNote = cleanAnnouncement(body.deliveryNote, TEXT_LIMITS.deliveryNote, true);
+  }
+  if (body?.pickupPlace !== undefined) {
+    values.pickupPlace = cleanAnnouncement(body.pickupPlace, TEXT_LIMITS.pickupPlace, true);
+  }
+  if (body?.pickupEnabled !== undefined) {
+    const wanted = Boolean(body.pickupEnabled);
+    // Sans lieu de retrait, l'option n'aurait aucun sens pour le client.
+    const place = values.pickupPlace ?? shopSettings().pickupPlace;
+    if (wanted && !place.trim()) return fail(res, 400, 'pickup_place_required', 'pickupPlace');
+    values.pickupEnabled = wanted ? 1 : 0;
   }
 
   saveShopSettings(values);
@@ -628,16 +679,22 @@ function cleanAnnouncement(value, max, keepLineBreaks) {
 
 /* --------------------------- Promotions --------------------------- */
 
-const PROMO_RULES = { triggers: TRIGGER_TYPES, rewards: REWARD_TYPES, scopes: REWARD_SCOPES };
+const PROMO_RULES = {
+  triggers: TRIGGER_TYPES, rewards: REWARD_TYPES, scopes: REWARD_SCOPES,
+  descriptionMax: TEXT_LIMITS.promotionDescription,
+};
 
 /** Colonnes de la table pour chaque champ valide. */
 const PROMO_COLUMNS = {
-  title: 'title', isActive: 'is_active',
+  title: 'title', description: 'description', isActive: 'is_active',
   triggerType: 'trigger_type', triggerProductId: 'trigger_product_id',
   triggerQty: 'trigger_qty', triggerAmount: 'trigger_amount_millimes',
-  rewardType: 'reward_type', rewardScope: 'reward_scope', rewardProductId: 'reward_product_id',
+  rewardType: 'reward_type', rewardScope: 'reward_scope', rewardProductIds: 'reward_product_ids',
   rewardPercent: 'reward_percent', rewardAmount: 'reward_amount_millimes', rewardMaxQty: 'reward_max_qty',
 };
+
+/** Les listes d'identifiants sont stockées en JSON dans une colonne texte. */
+const promoColumnValue = (key, value) => (key === 'rewardProductIds' ? JSON.stringify(value) : value);
 
 const productExists = (id) => Boolean(db.prepare('SELECT 1 FROM products WHERE id = ?').get(id));
 
@@ -657,8 +714,8 @@ function checkPromotionProducts(value) {
   if (value.triggerProductId && !productExists(value.triggerProductId)) {
     return { code: 'promo_trigger_product_required', field: 'triggerProductId' };
   }
-  if (value.rewardProductId && !productExists(value.rewardProductId)) {
-    return { code: 'promo_reward_product_required', field: 'rewardProductId' };
+  if (value.rewardProductIds.some((id) => !productExists(id))) {
+    return { code: 'promo_reward_product_required', field: 'rewardProductIds' };
   }
   return null;
 }
@@ -684,7 +741,7 @@ async function adminCreatePromotion(req, res) {
       `INSERT INTO promotions (sort_order, ${keys.map((k) => PROMO_COLUMNS[k]).join(', ')})
        VALUES (?, ${keys.map(() => '?').join(', ')})`
     )
-    .run(last + 10, ...keys.map((k) => checked.value[k]));
+    .run(last + 10, ...keys.map((k) => promoColumnValue(k, checked.value[k])));
 
   const created = db.prepare('SELECT * FROM promotions WHERE id = ?').get(Number(lastInsertRowid));
   console.log(`[promotions] ajoutee : ${created.title}`);
@@ -717,7 +774,7 @@ async function adminUpdatePromotion(req, res, id) {
 
   const keys = Object.keys(PROMO_COLUMNS);
   db.prepare(`UPDATE promotions SET ${keys.map((k) => `${PROMO_COLUMNS[k]} = ?`).join(', ')} WHERE id = ?`)
-    .run(...keys.map((k) => checked.value[k]), id);
+    .run(...keys.map((k) => promoColumnValue(k, checked.value[k])), id);
 
   const saved = db.prepare('SELECT * FROM promotions WHERE id = ?').get(id);
   sendJson(res, 200, { promotion: promotionPayload(promotionFromRow(saved)) });
@@ -828,15 +885,34 @@ function adminDeleteProduct(res, id) {
   // Les commandes gardent leur propre copie du nom et du prix : l'historique
   // reste lisible même après la suppression du produit.
   db.prepare('DELETE FROM products WHERE id = ?').run(id);
-  // Une promotion qui vise un produit disparu ne veut plus rien dire.
-  const orphaned = db
-    .prepare('DELETE FROM promotions WHERE trigger_product_id = ? OR reward_product_id = ?')
-    .run(id, id).changes;
-  if (orphaned) console.log(`[promotions] ${orphaned} promotion(s) retiree(s) avec le produit`);
+  cleanPromotionsAfterProductDelete(id);
   if (product.image_path) removeUpload(product.image_path);
 
   console.log(`[catalogue] produit supprimé : ${product.name} (${product.slug})`);
   sendJson(res, 200, { deleted: id });
+}
+
+/**
+ * Retire un produit supprimé des promotions : celles qu'il déclenchait n'ont
+ * plus de sens, et il sort de la liste des produits remisés. Une promotion qui
+ * ne remise plus rien est supprimée à son tour.
+ */
+function cleanPromotionsAfterProductDelete(productId) {
+  let removed = db.prepare('DELETE FROM promotions WHERE trigger_product_id = ?').run(productId).changes;
+
+  const update = db.prepare('UPDATE promotions SET reward_product_ids = ? WHERE id = ?');
+  const drop = db.prepare('DELETE FROM promotions WHERE id = ?');
+  for (const promo of listPromotions()) {
+    if (!promo.rewardProductIds.includes(productId)) continue;
+    const kept = promo.rewardProductIds.filter((id) => id !== productId);
+    if (kept.length === 0 && promo.rewardScope === 'product') {
+      drop.run(promo.id);
+      removed += 1;
+    } else {
+      update.run(JSON.stringify(kept), promo.id);
+    }
+  }
+  if (removed) console.log(`[promotions] ${removed} promotion(s) retirée(s) avec le produit`);
 }
 
 /** Supprime une photo du disque, en restant confiné au dossier des envois. */

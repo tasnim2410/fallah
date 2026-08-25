@@ -160,6 +160,42 @@
                 <span data-i18n="admin.alwaysFree"></span>
               </label>
             </div>
+
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" id="s-daily-delivery" name="dailyDelivery" checked>
+                <span data-i18n="admin.dailyDelivery"></span>
+              </label>
+            </div>
+            <div class="field" data-field="deliveryDelayDays" id="delay-field">
+              <label class="field__label" for="s-delay-days" data-i18n="admin.delayDays"></label>
+              <input type="number" id="s-delay-days" name="deliveryDelayDays" min="1" max="30" step="1"
+                     aria-describedby="s-delay-hint">
+              <span class="field__hint" id="s-delay-hint" data-i18n="admin.delayDaysHint"></span>
+              <span class="field__error" data-error-for="deliveryDelayDays"></span>
+            </div>
+            <div class="field">
+              <label class="field__label" for="s-delivery-note" data-i18n="admin.deliveryNote"></label>
+              <textarea id="s-delivery-note" name="deliveryNote" maxlength="200" rows="2" dir="auto"
+                        data-i18n-placeholder="admin.deliveryNotePh"></textarea>
+            </div>
+
+            <h2 class="panel__title" style="margin-block-start: var(--space-5)">
+              <span data-icon="pin"></span>
+              <span data-i18n="admin.secPickup"></span>
+            </h2>
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" id="s-pickup-enabled" name="pickupEnabled">
+                <span data-i18n="admin.pickupEnabled"></span>
+              </label>
+            </div>
+            <div class="field" data-field="pickupPlace">
+              <label class="field__label" for="s-pickup-place" data-i18n="admin.pickupPlace"></label>
+              <textarea id="s-pickup-place" name="pickupPlace" maxlength="300" rows="2" dir="auto"
+                        data-i18n-placeholder="admin.pickupPlacePh"></textarea>
+              <span class="field__error" data-error-for="pickupPlace"></span>
+            </div>
             <h2 class="panel__title" style="margin-block-start: var(--space-5)">
               <span data-icon="tag"></span>
               <span data-i18n="admin.secAnnouncement"></span>
@@ -351,6 +387,14 @@
           <span class="field__error" data-error-for="title"></span>
         </div>
 
+        <div class="field" data-field="description">
+          <label class="field__label" for="promo-description" data-i18n="promo.description"></label>
+          <textarea id="promo-description" name="description" maxlength="200" rows="2" dir="auto"
+                    aria-describedby="promo-description-hint"></textarea>
+          <span class="field__hint" id="promo-description-hint" data-i18n="promo.descriptionHint"></span>
+          <span class="field__error" data-error-for="description"></span>
+        </div>
+
         <fieldset class="form-section">
           <legend data-i18n="promo.secTrigger"></legend>
           <div class="form-grid">
@@ -390,11 +434,6 @@
               <select id="promo-reward-scope" name="rewardScope"></select>
               <span class="field__error" data-error-for="rewardScope"></span>
             </div>
-            <div class="field" data-field="rewardProductId" data-when-scope="product">
-              <label class="field__label" for="promo-reward-product" data-i18n="promo.rewardProductLabel"></label>
-              <select id="promo-reward-product" name="rewardProductId"></select>
-              <span class="field__error" data-error-for="rewardProductId"></span>
-            </div>
             <div class="field" data-field="rewardPercent" data-when-reward="percent">
               <label class="field__label" for="promo-reward-percent" data-i18n="promo.rewardPercentLabel"></label>
               <input type="number" id="promo-reward-percent" name="rewardPercent" min="1" max="100" step="1">
@@ -412,6 +451,14 @@
               <span class="field__hint" id="promo-max-hint" data-i18n="promo.rewardMaxQtyHint"></span>
               <span class="field__error" data-error-for="rewardMaxQty"></span>
             </div>
+          </div>
+
+          <div class="field" data-field="rewardProductIds" data-when-scope="product">
+            <span class="field__label" id="promo-products-label" data-i18n="promo.rewardProductsLabel"></span>
+            <span class="field__hint" data-i18n="promo.rewardProductsHint"></span>
+            <div class="product-picker" id="promo-reward-products" role="group"
+                 aria-labelledby="promo-products-label"></div>
+            <span class="field__error" data-error-for="rewardProductIds"></span>
           </div>
 
           <div class="switch-row">

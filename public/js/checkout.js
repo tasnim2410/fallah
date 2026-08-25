@@ -1,11 +1,11 @@
 /** Page commande : récapitulatif, formulaire client, envoi et confirmation. */
 
 import { t, lang, money, qtyLabel, onLangChange } from './i18n.js';
-import { produceIcon } from './icons.js';
+import { produceIcon, icon } from './icons.js';
 import { createMap, locateMe, DEFAULT_CENTER } from './map.js';
 import {
   initShell, api, getConfig, toast, esc,
-  getCart, clearCart, cartSummary, lineMedia,
+  getCart, clearCart, cartSummary, lineMedia, pickupAvailable, deliveryTiming,
 } from './app.js';
 import { totalsMarkup } from './totals.js';
 
@@ -18,8 +18,88 @@ const checkoutView = document.getElementById('checkout-view');
 const successView = document.getElementById('success-view');
 
 let config = null;
+/** Mode de remise choisi par le client : livraison à domicile ou retrait. */
+let fulfilment = 'delivery';
 
 initShell();
+
+/* ---------------------- Livraison ou retrait --------------------- */
+
+const fulfilmentPanel = document.getElementById('fulfilment-panel');
+const fulfilmentChoice = document.getElementById('fulfilment-choice');
+const addressPanel = document.getElementById('address-panel');
+
+/**
+ * Le choix n'a lieu d'être que si le vendeur propose le retrait ; sinon la
+ * commande est livrée et le panneau reste masqué.
+ */
+function renderFulfilment() {
+  const canPickup = pickupAvailable(config);
+  fulfilmentPanel.hidden = !canPickup;
+  if (!canPickup) fulfilment = 'delivery';
+
+  const options = [
+    {
+      value: 'delivery',
+      label: t('fulfil.delivery'),
+      detail: [deliveryTiming(config), config?.fulfilment?.deliveryNote].filter(Boolean).join(' — '),
+    },
+    {
+      value: 'pickup',
+      label: t('fulfil.pickup'),
+      detail: config?.fulfilment?.pickupPlace || '',
+    },
+  ];
+
+  fulfilmentChoice.innerHTML = options
+    .map(
+      (o) => `<label class="radio-card">
+        <input type="radio" name="fulfilment" value="${o.value}" ${o.value === fulfilment ? 'checked' : ''}>
+        <span>
+          <strong>${esc(o.label)}</strong>
+          ${o.detail ? `<small class="radio-card__detail">${esc(o.detail)}</small>` : ''}
+        </span>
+      </label>`
+    )
+    .join('');
+
+  applyFulfilment();
+}
+
+/** L'adresse ne sert qu'à la livraison : on la retire quand le client vient. */
+function applyFulfilment() {
+  const pickup = fulfilment === 'pickup';
+  addressPanel.hidden = pickup;
+  // Un champ requis mais masqué bloquerait l'envoi du formulaire.
+  document.getElementById('address').required = !pickup;
+  document.getElementById('governorate').required = !pickup;
+  renderSummary();
+}
+
+fulfilmentChoice.addEventListener('change', (event) => {
+  const picked = event.target.closest('input[name="fulfilment"]');
+  if (!picked) return;
+  fulfilment = picked.value;
+  applyFulfilment();
+});
+
+/**
+ * Rappel de livraison affiché même sans choix possible : le client doit savoir
+ * quand il sera servi, surtout si le vendeur a coupé la livraison quotidienne.
+ */
+function deliveryNoticeMarkup() {
+  if (fulfilment === 'pickup') {
+    return `<div class="notice">${icon('pin')}
+      <span>${esc(t('fulfil.pickupAt', { place: config?.fulfilment?.pickupPlace || '' }))}</span></div>`;
+  }
+  /* Rien à signaler quand la boutique livre normalement : on ne prévient que
+   * si le vendeur a groupé les tournées ou laissé un mot. */
+  const note = config?.fulfilment?.deliveryNote || '';
+  const grouped = config?.fulfilment && !config.fulfilment.dailyDelivery;
+  if (!grouped && !note) return '';
+  return `<div class="notice">${icon('truck')}
+    <span>${esc([grouped ? deliveryTiming(config) : '', note].filter(Boolean).join(' — '))}</span></div>`;
+}
 
 /* ------------------------- Récapitulatif ------------------------- */
 
@@ -53,7 +133,14 @@ function renderSummary() {
     )
     .join('');
 
-  summaryTotals.innerHTML = totalsMarkup(cartSummary(config), config);
+  const summary = cartSummary(config);
+  // Au retrait, il n'y a pas de frais de livraison à annoncer.
+  if (fulfilment === 'pickup') {
+    summary.delivery = 0;
+    summary.total = summary.subtotal - summary.discount;
+  }
+  summaryTotals.innerHTML = totalsMarkup(summary, config, { pickup: fulfilment === 'pickup' })
+    + deliveryNoticeMarkup();
 }
 
 function renderGovernorates() {
@@ -192,6 +279,8 @@ function clearErrors() {
 function validateLocally(values) {
   if (values.name.trim().length < 3) return { field: 'name', code: 'err.name_too_short' };
   if (!/^[2-579]\d{7}$/.test(values.phone.replace(/\D/g, ''))) return { field: 'phone', code: 'err.phone_invalid' };
+  // Au retrait sur place, ni gouvernorat ni adresse ne sont demandés.
+  if (values.fulfilment === 'pickup') return null;
   if (!values.governorate) return { field: 'governorate', code: 'err.governorate_invalid' };
   if (values.address.trim().length < 10) return { field: 'address', code: 'err.address_too_short' };
   return null;
@@ -227,6 +316,7 @@ form.addEventListener('submit', async (event) => {
     ...pinValues(),
     note: String(data.get('note') || ''),
     preferredTime: String(data.get('preferredTime') || 'any'),
+    fulfilment,
     lang,
   };
 
@@ -298,13 +388,13 @@ document.getElementById('copy-ref').addEventListener('click', async () => {
 
 onLangChange(() => {
   renderGovernorates();
-  renderSummary();
+  renderFulfilment();
   renderPinState();
 });
 
 (async () => {
   config = await getConfig();
   renderGovernorates();
-  renderSummary();
+  renderFulfilment();
   renderPinState();
 })();

@@ -202,6 +202,8 @@ export const SHOP = {
   // Point posé sur la carte : sert à générer le bouton « Google Maps » du client.
   pickupLat: null,
   pickupLng: null,
+  // Lien Google Maps collé directement par le vendeur ; prioritaire sur le point posé sur la carte.
+  pickupMapUrl: '',
 };
 
 /** Longueurs maximales des textes libres saisis par le vendeur. */
@@ -210,6 +212,7 @@ export const TEXT_LIMITS = {
   announcementBody: 400,
   deliveryNote: 200,
   pickupPlace: 300,
+  pickupMapUrl: 300,
   promotionDescription: 200,
 };
 
@@ -228,7 +231,10 @@ const NUMBER_SETTINGS = [
   'dailyDelivery', 'pickupEnabled', 'pickupLat', 'pickupLng',
 ];
 /** Réglages en texte libre (annonce, note de livraison, lieu de retrait, date de la prochaine tournée). */
-const TEXT_SETTINGS = ['shopPhone', 'announcementTitle', 'announcementBody', 'deliveryNote', 'pickupPlace', 'nextDeliveryDate'];
+const TEXT_SETTINGS = [
+  'shopPhone', 'announcementTitle', 'announcementBody', 'deliveryNote',
+  'pickupPlace', 'pickupMapUrl', 'nextDeliveryDate',
+];
 /** Réglages vrai/faux, exposés comme des booléens. */
 const FLAG_SETTINGS = ['deliveryAlwaysFree', 'announcementActive', 'dailyDelivery', 'pickupEnabled'];
 

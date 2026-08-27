@@ -343,6 +343,11 @@ const promotionPayload = (promo) => ({
   rewardProducts: promo.rewardProductIds.map(promotionProduct).filter(Boolean),
 });
 
+/** Lien envoyé au client : le lien collé par le vendeur prime sur le point posé sur la carte. */
+const effectivePickupMapUrl = (shop) =>
+  shop.pickupMapUrl
+  || (shop.pickupLat != null && shop.pickupLng != null ? mapsLink(shop.pickupLat, shop.pickupLng) : '');
+
 function getConfig(res) {
   const shop = shopSettings();
   const announcementReady = shop.announcementActive && Boolean(shop.announcementTitle || shop.announcementBody);
@@ -365,9 +370,7 @@ function getConfig(res) {
       deliveryNote: shop.deliveryNote,
       pickupEnabled: shop.pickupEnabled,
       pickupPlace: shop.pickupPlace,
-      pickupMapUrl: shop.pickupLat != null && shop.pickupLng != null
-        ? mapsLink(shop.pickupLat, shop.pickupLng)
-        : '',
+      pickupMapUrl: effectivePickupMapUrl(shop),
     },
   });
 }
@@ -599,6 +602,7 @@ const shopPayload = () => {
       pickupPlace: shop.pickupPlace,
       pickupLat: shop.pickupLat,
       pickupLng: shop.pickupLng,
+      pickupMapUrl: shop.pickupMapUrl,
     },
     limits: {
       delivery: SHOP_LIMITS.deliveryMillimes,
@@ -685,6 +689,11 @@ async function adminUpdateSettings(req, res) {
     values.pickupLat = pin.lat;
     values.pickupLng = pin.lng;
   }
+  if (body?.pickupMapUrl !== undefined) {
+    const url = normalizeMapUrl(body.pickupMapUrl);
+    if (url === null) return fail(res, 400, 'pickup_map_url_invalid', 'pickupMapUrl');
+    values.pickupMapUrl = url;
+  }
   if (body?.pickupEnabled !== undefined) {
     const wanted = Boolean(body.pickupEnabled);
     // Sans lieu de retrait, l'option n'aurait aucun sens pour le client.
@@ -704,6 +713,22 @@ function cleanAnnouncement(value, max, keepLineBreaks) {
   if (typeof value !== 'string') return '';
   const pattern = keepLineBreaks ? /[\u0000-\u0009\u000B-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g;
   return value.replace(pattern, ' ').trim().slice(0, max);
+}
+
+/**
+ * Vérifie le lien collé par le vendeur (Google Maps ou autre).
+ * @returns {string|null} le lien nettoyé, '' s'il est retiré, ou null s'il est invalide.
+ */
+function normalizeMapUrl(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  } catch {
+    return null;
+  }
+  return value.slice(0, TEXT_LIMITS.pickupMapUrl);
 }
 
 /* --------------------------- Promotions --------------------------- */

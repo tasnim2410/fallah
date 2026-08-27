@@ -642,6 +642,7 @@ function renderSettings() {
   settingsForm.elements.deliveryNote.value = settings.deliveryNote || '';
   settingsForm.elements.pickupEnabled.checked = Boolean(settings.pickupEnabled);
   settingsForm.elements.pickupPlace.value = settings.pickupPlace || '';
+  settingsForm.elements.pickupMapUrl.value = settings.pickupMapUrl || '';
   sSavedPin = settings.pickupLat != null && settings.pickupLng != null
     ? { lat: settings.pickupLat, lng: settings.pickupLng }
     : null;
@@ -699,6 +700,7 @@ settingsForm.addEventListener('submit', async (event) => {
       pickupEnabled: settingsForm.elements.pickupEnabled.checked,
       pickupLat: sSavedPin ? sSavedPin.lat : null,
       pickupLng: sSavedPin ? sSavedPin.lng : null,
+      pickupMapUrl: settingsForm.elements.pickupMapUrl.value,
     },
   });
 

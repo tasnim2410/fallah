@@ -15,7 +15,7 @@
  * Bump `VERSION` à chaque déploiement pour purger les anciens caches.
  */
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL_CACHE = `fallah-shell-${VERSION}`;
 const DATA_CACHE = `fallah-data-${VERSION}`;
 

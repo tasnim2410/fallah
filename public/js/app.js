@@ -347,6 +347,18 @@ function mountReveal() {
   for (const el of targets) observer.observe(el);
 }
 
+/**
+ * « +21650558240 » → « +216 50 558 240 ». Les groupes se lisent plus vite, et
+ * le numéro reste affiché en `dir="ltr"` : sans cela, le « + » saute à l'autre
+ * bout dès qu'il est posé dans une phrase arabe.
+ */
+export function formatShopPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  const local = digits.length === 11 && digits.startsWith('216') ? digits.slice(3) : digits;
+  if (local.length !== 8) return String(raw || '');
+  return `+216 ${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5)}`;
+}
+
 /** Affiche le numéro du vendeur partout où il est référencé. */
 async function mountShopPhone() {
   const nodes = document.querySelectorAll('[data-shop-phone]');
@@ -354,7 +366,10 @@ async function mountShopPhone() {
   const config = await getConfig();
   if (!config) return;
   for (const el of nodes) {
-    el.textContent = config.shopPhone;
+    el.textContent = formatShopPhone(config.shopPhone);
+    // Posé ici aussi : toutes les pages en profitent, pas seulement celles
+    // dont le gabarit pense à l'écrire.
+    el.dir = 'ltr';
     if (el.tagName === 'A') el.href = `tel:${config.shopPhone}`;
   }
 }

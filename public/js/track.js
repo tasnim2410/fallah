@@ -2,7 +2,7 @@
 
 import { t, pick, money, qtyLabel, dateLabel, onLangChange } from './i18n.js';
 import { icon } from './icons.js';
-import { initShell, api, getConfig, esc } from './app.js';
+import { initShell, api, getConfig, esc, formatShopPhone } from './app.js';
 
 const form = document.getElementById('track-form');
 const result = document.getElementById('result');
@@ -102,7 +102,7 @@ function renderOrder(order) {
   // Le numéro du vendeur est injecté après coup (il vient de la configuration).
   const phoneLink = result.querySelector('[data-shop-phone]');
   if (phoneLink && config) {
-    phoneLink.textContent = config.shopPhone;
+    phoneLink.textContent = formatShopPhone(config.shopPhone);
     phoneLink.href = `tel:${config.shopPhone}`;
   }
 }

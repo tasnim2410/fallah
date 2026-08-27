@@ -12,7 +12,7 @@ import {
 import { seedProducts } from './seed.js';
 import {
   GOVERNORATES, validateCustomer, validateCartShape, validateProduct, validatePromotion,
-  slugify, detectImage, normalizePhone, normalizePin,
+  slugify, detectImage, normalizePhone, normalizePin, normalizeMapUrl,
 } from './validate.js';
 import {
   computeDiscounts, resolveDelivery, TRIGGER_TYPES, REWARD_TYPES, REWARD_SCOPES,
@@ -320,6 +320,7 @@ const adminOrder = (row) => ({
   // Point posé sur la carte : réservé au vendeur, jamais exposé au suivi public.
   lat: row.lat ?? null,
   lng: row.lng ?? null,
+  mapUrl: row.map_url || '',
   note: row.note,
   adminNote: row.admin_note,
   lang: row.lang,
@@ -467,10 +468,10 @@ async function createOrder(req, res, ip) {
   const c = customer.value;
 
   const insertOrder = db.prepare(`
-    INSERT INTO orders (reference, customer_name, phone, governorate, address, lat, lng, note, preferred_time,
-                        lang, subtotal_millimes, discount_millimes, discounts_json,
+    INSERT INTO orders (reference, customer_name, phone, governorate, address, lat, lng, map_url, note,
+                        preferred_time, lang, subtotal_millimes, discount_millimes, discounts_json,
                         delivery_millimes, total_millimes, fulfilment, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
   `);
   const insertItem = db.prepare(`
     INSERT INTO order_items (order_id, product_id, name, unit, qty, unit_price_millimes, line_millimes)
@@ -483,8 +484,9 @@ async function createOrder(req, res, ip) {
   try {
     reference = nextOrderReference();
     const { lastInsertRowid } = insertOrder.run(
-      reference, c.name, c.phone, c.governorate, c.address, c.lat, c.lng, c.note, c.preferredTime,
-      c.lang, subtotal, discount, JSON.stringify(promo.applied), delivery, total, fulfilment, now, now
+      reference, c.name, c.phone, c.governorate, c.address, c.lat, c.lng, c.mapUrl, c.note,
+      c.preferredTime, c.lang, subtotal, discount, JSON.stringify(promo.applied), delivery, total,
+      fulfilment, now, now
     );
     for (const { p, qty, lineTotal, unitPrice } of lines) {
       insertItem.run(Number(lastInsertRowid), p.id, p.name, p.unit, qty, unitPrice, lineTotal);
@@ -713,22 +715,6 @@ function cleanAnnouncement(value, max, keepLineBreaks) {
   if (typeof value !== 'string') return '';
   const pattern = keepLineBreaks ? /[\u0000-\u0009\u000B-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g;
   return value.replace(pattern, ' ').trim().slice(0, max);
-}
-
-/**
- * Vérifie le lien collé par le vendeur (Google Maps ou autre).
- * @returns {string|null} le lien nettoyé, '' s'il est retiré, ou null s'il est invalide.
- */
-function normalizeMapUrl(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return '';
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  } catch {
-    return null;
-  }
-  return value.slice(0, TEXT_LIMITS.pickupMapUrl);
 }
 
 /* --------------------------- Promotions --------------------------- */

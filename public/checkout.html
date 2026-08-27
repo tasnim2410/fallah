@@ -113,56 +113,71 @@
                 <span class="field__error" data-error-for="address"></span>
               </div>
 
-              <!-- Point sur la carte : facultatif, mais très utile au livreur. -->
-              <div class="field map-field" data-field="pin">
+              <!-- Point sur la carte : facultatif, mais très utile au livreur. Verrouillé tant que
+                   le client n'a rien écrit dans l'adresse : un point seul ne suffit pas à livrer. -->
+              <div class="field map-field" data-field="pin" id="pin-field">
                 <span class="field__label" id="pin-label">
                   <span data-i18n="form.pin"></span>
                   <span class="badge badge--soft" data-i18n="form.pinOptional"></span>
                 </span>
 
-                <button type="button" class="btn btn--ghost btn--block" id="pin-open">
-                  <span data-icon="pin"></span>
-                  <span data-i18n="form.pinOpen"></span>
-                </button>
+                <p class="field__hint" id="pin-locked-hint" data-i18n="form.pinLocked"></p>
 
-                <div class="map-picker" id="pin-picker" hidden>
-                  <div class="map" id="pin-map" tabindex="0" role="application"
-                       aria-describedby="pin-help" data-i18n-aria="form.pin">
-                    <div class="map__crosshair" aria-hidden="true">
-                      <span data-icon="pin"></span>
-                    </div>
-                    <div class="map__zoom">
-                      <button type="button" data-map-zoom="1" data-i18n-aria="form.pinZoomIn">+</button>
-                      <button type="button" data-map-zoom="-1" data-i18n-aria="form.pinZoomOut">−</button>
-                    </div>
-                    <p class="map__credit">
-                      ©&nbsp;<a href="https://www.openstreetmap.org/copyright" target="_blank"
-                                rel="noopener">OpenStreetMap</a>
-                    </p>
+                <div id="pin-controls" hidden>
+                  <div class="field" data-field="mapUrl">
+                    <label class="field__label" for="map-url" data-i18n="form.mapUrl"></label>
+                    <input type="url" id="map-url" name="mapUrl" maxlength="300" dir="ltr"
+                           data-i18n-placeholder="form.mapUrlPh">
+                    <span class="field__hint" data-i18n="form.mapUrlHint"></span>
+                    <span class="field__error" data-error-for="mapUrl"></span>
                   </div>
 
-                  <p class="field__hint" id="pin-help" data-i18n="form.pinHelp"></p>
+                  <p class="field__hint" data-i18n="form.or"></p>
 
-                  <div class="map-picker__actions">
-                    <button type="button" class="btn btn--sm" id="pin-locate">
-                      <span data-icon="target"></span>
-                      <span data-i18n="form.pinLocate"></span>
-                    </button>
-                    <button type="button" class="btn btn--sm btn--accent" id="pin-confirm">
-                      <span data-icon="check"></span>
-                      <span data-i18n="form.pinConfirm"></span>
-                    </button>
-                    <button type="button" class="btn btn--sm btn--ghost" id="pin-cancel" data-i18n="form.pinCancel"></button>
+                  <button type="button" class="btn btn--ghost btn--block" id="pin-open">
+                    <span data-icon="pin"></span>
+                    <span data-i18n="form.pinOpen"></span>
+                  </button>
+
+                  <div class="map-picker" id="pin-picker" hidden>
+                    <div class="map" id="pin-map" tabindex="0" role="application"
+                         aria-describedby="pin-help" data-i18n-aria="form.pin">
+                      <div class="map__crosshair" aria-hidden="true">
+                        <span data-icon="pin"></span>
+                      </div>
+                      <div class="map__zoom">
+                        <button type="button" data-map-zoom="1" data-i18n-aria="form.pinZoomIn">+</button>
+                        <button type="button" data-map-zoom="-1" data-i18n-aria="form.pinZoomOut">−</button>
+                      </div>
+                      <p class="map__credit">
+                        ©&nbsp;<a href="https://www.openstreetmap.org/copyright" target="_blank"
+                                  rel="noopener">OpenStreetMap</a>
+                      </p>
+                    </div>
+
+                    <p class="field__hint" id="pin-help" data-i18n="form.pinHelp"></p>
+
+                    <div class="map-picker__actions">
+                      <button type="button" class="btn btn--sm" id="pin-locate">
+                        <span data-icon="target"></span>
+                        <span data-i18n="form.pinLocate"></span>
+                      </button>
+                      <button type="button" class="btn btn--sm btn--accent" id="pin-confirm">
+                        <span data-icon="check"></span>
+                        <span data-i18n="form.pinConfirm"></span>
+                      </button>
+                      <button type="button" class="btn btn--sm btn--ghost" id="pin-cancel" data-i18n="form.pinCancel"></button>
+                    </div>
                   </div>
-                </div>
 
-                <div class="map-pinned" id="pin-summary" hidden>
-                  <span data-icon="pin"></span>
-                  <span class="map-pinned__text">
-                    <strong data-i18n="form.pinSaved"></strong>
-                    <span class="map-pinned__coords" id="pin-coords" dir="ltr"></span>
-                  </span>
-                  <button type="button" class="btn btn--sm btn--ghost" id="pin-clear" data-i18n="form.pinClear"></button>
+                  <div class="map-pinned" id="pin-summary" hidden>
+                    <span data-icon="pin"></span>
+                    <span class="map-pinned__text">
+                      <strong data-i18n="form.pinSaved"></strong>
+                      <span class="map-pinned__coords" id="pin-coords" dir="ltr"></span>
+                    </span>
+                    <button type="button" class="btn btn--sm btn--ghost" id="pin-clear" data-i18n="form.pinClear"></button>
+                  </div>
                 </div>
 
                 <input type="hidden" name="lat" id="pin-lat">

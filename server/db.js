@@ -45,6 +45,7 @@ db.exec(`
     address             TEXT    NOT NULL,
     lat                 REAL,
     lng                 REAL,
+    map_url             TEXT    NOT NULL DEFAULT '',
     note                TEXT    NOT NULL DEFAULT '',
     preferred_time      TEXT    NOT NULL DEFAULT 'any',
     lang                TEXT    NOT NULL DEFAULT 'ar',
@@ -147,6 +148,8 @@ addMissingColumns('products', { image_path: `TEXT NOT NULL DEFAULT ''` });
 addMissingColumns('products', { sale_price_millimes: 'INTEGER NOT NULL DEFAULT 0' });
 // Point posé sur la carte au moment de la commande (facultatif, donc nullable).
 addMissingColumns('orders', { lat: 'REAL', lng: 'REAL' });
+// Lien Google Maps collé par le client ; prioritaire sur le point posé sur la carte.
+addMissingColumns('orders', { map_url: `TEXT NOT NULL DEFAULT ''` });
 addMissingColumns('orders', {
   discount_millimes: 'INTEGER NOT NULL DEFAULT 0',
   discounts_json: `TEXT NOT NULL DEFAULT '[]'`,

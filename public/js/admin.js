@@ -138,9 +138,14 @@ function governorateLabel(key) {
   return gov ? pick(gov) : key;
 }
 
+/** Lien à ouvrir pour le livreur : le lien collé par le client prime sur le point posé. */
+const orderMapUrl = (order) =>
+  order.mapUrl || (order.lat != null ? mapsLink(order.lat, order.lng) : '');
+
 function orderCard(order) {
   const next = NEXT_ACTION[order.status];
   const closed = order.status === 'delivered' || order.status === 'cancelled';
+  const mapUrl = orderMapUrl(order);
   return `
     <article class="order-card" data-order="${order.id}">
       <div class="order-card__head">
@@ -158,10 +163,10 @@ function orderCard(order) {
         <div class="order-card__field"><span>${esc(t('admin.time'))}</span>${esc(t(`form.time${order.preferredTime[0].toUpperCase()}${order.preferredTime.slice(1)}`))}</div>
         <div class="order-card__field"><span>${esc(t('admin.address'))}</span>
           ${esc(governorateLabel(order.governorate))} — ${esc(order.address)}</div>
-        ${order.lat != null
+        ${mapUrl
           ? `<div class="order-card__field"><span>${esc(t('admin.pin'))}</span>
-               <a href="${esc(mapsLink(order.lat, order.lng))}" target="_blank" rel="noopener" dir="ltr">
-                 ${esc(order.lat.toFixed(5))}, ${esc(order.lng.toFixed(5))}</a></div>`
+               <a href="${esc(mapUrl)}" target="_blank" rel="noopener" dir="ltr">
+                 ${order.lat != null ? `${esc(order.lat.toFixed(5))}, ${esc(order.lng.toFixed(5))}` : esc(t('admin.openMap'))}</a></div>`
           : ''}
         ${order.note ? `<div class="order-card__field"><span>${esc(t('admin.note'))}</span>${esc(order.note)}</div>` : ''}
       </div>
@@ -188,8 +193,8 @@ function orderCard(order) {
         <a class="btn btn--sm" href="tel:+216${esc(order.phone)}">
           ${icon('phone')}<span>${esc(t('admin.call'))}</span>
         </a>
-        ${order.lat != null
-          ? `<a class="btn btn--sm" href="${esc(mapsLink(order.lat, order.lng))}" target="_blank" rel="noopener">
+        ${mapUrl
+          ? `<a class="btn btn--sm" href="${esc(mapUrl)}" target="_blank" rel="noopener">
                ${icon('pin')}<span>${esc(t('admin.openMap'))}</span>
              </a>`
           : ''}

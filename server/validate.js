@@ -78,6 +78,10 @@ export function validateCustomer(body, { pickup = false } = {}) {
   const pin = normalizePin(body?.lat, body?.lng);
   if (pin === null) return { ok: false, field: 'address', code: 'pin_invalid' };
 
+  // Le client peut coller un lien Google Maps à la place du point sur la carte.
+  const mapUrl = normalizeMapUrl(body?.mapUrl);
+  if (mapUrl === null) return { ok: false, field: 'mapUrl', code: 'map_url_invalid' };
+
   const preferredTime = PREFERRED_TIMES.includes(body?.preferredTime) ? body.preferredTime : 'any';
   const lang = body?.lang === 'fr' ? 'fr' : 'ar';
 
@@ -85,7 +89,7 @@ export function validateCustomer(body, { pickup = false } = {}) {
     ok: true,
     value: {
       name, phone, governorate, address,
-      lat: pin.lat, lng: pin.lng,
+      lat: pin.lat, lng: pin.lng, mapUrl,
       note: cleanText(body?.note, 300), preferredTime, lang,
     },
   };
@@ -107,6 +111,22 @@ export function normalizePin(rawLat, rawLng) {
   if (lng < TUNISIA_BOUNDS.minLng || lng > TUNISIA_BOUNDS.maxLng) return null;
   // Six décimales ≈ 10 cm : au-delà, ce ne sont plus que des chiffres inutiles.
   return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
+}
+
+/**
+ * Vérifie un lien collé par l'utilisateur (Google Maps ou autre).
+ * @returns {string} le lien nettoyé ('' s'il est vide), ou null s'il est invalide.
+ */
+export function normalizeMapUrl(raw) {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  } catch {
+    return null;
+  }
+  return value.slice(0, 300);
 }
 
 const COMBINING_MARKS = new RegExp('[\\u0300-\\u036F]', 'g');

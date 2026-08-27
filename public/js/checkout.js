@@ -163,6 +163,9 @@ function renderGovernorates() {
 
 /* ---------------------- Point sur la carte ----------------------- */
 
+const addressInput = document.getElementById('address');
+const pinControls = document.getElementById('pin-controls');
+const pinLockedHint = document.getElementById('pin-locked-hint');
 const pinOpen = document.getElementById('pin-open');
 const pinPicker = document.getElementById('pin-picker');
 const pinSummary = document.getElementById('pin-summary');
@@ -170,6 +173,15 @@ const pinCoords = document.getElementById('pin-coords');
 const pinLat = document.getElementById('pin-lat');
 const pinLng = document.getElementById('pin-lng');
 const pinLocate = document.getElementById('pin-locate');
+
+/* Le point sur la carte (ou le lien collé) ne sert à rien sans adresse écrite :
+ * on masque ces contrôles tant que le client n'a rien tapé, même approximatif. */
+function updatePinLock() {
+  const hasAddress = addressInput.value.trim().length > 0;
+  pinControls.hidden = !hasAddress;
+  pinLockedHint.hidden = hasAddress;
+}
+addressInput.addEventListener('input', updatePinLock);
 
 let map = null;
 /** Position visée par le repère tant que le client n'a pas validé. */
@@ -322,6 +334,7 @@ form.addEventListener('submit', async (event) => {
     governorate: String(data.get('governorate') || ''),
     address: String(data.get('address') || ''),
     ...pinValues(),
+    mapUrl: String(data.get('mapUrl') || ''),
     note: String(data.get('note') || ''),
     preferredTime: String(data.get('preferredTime') || 'any'),
     fulfilment,

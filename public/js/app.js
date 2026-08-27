@@ -222,6 +222,10 @@ export function promotionCap(promo) {
  * remisé.
  */
 export function promotionCondition(promo) {
+  if (promo.triggerType === 'contains') {
+    if (!promo.triggerProduct) return t('promo.condProductMissing');
+    return t('promo.condContains', { product: promo.triggerProduct.name });
+  }
   if (promo.triggerType === 'product') {
     if (!promo.triggerProduct) return t('promo.condProductMissing');
     return t('promo.condProduct', {
@@ -240,7 +244,9 @@ export function promotionCondition(promo) {
  */
 export function autoDescribePromotion(promo) {
   let condition = '';
-  if (promo.triggerType === 'product' && promo.triggerProduct) {
+  if (promo.triggerType === 'contains' && promo.triggerProduct) {
+    condition = t('promo.triggerContains', { product: promo.triggerProduct.name });
+  } else if (promo.triggerType === 'product' && promo.triggerProduct) {
     condition = t('promo.triggerProduct', {
       qty: qtyLabel(promo.triggerQty, promo.triggerProduct.unit),
       product: promo.triggerProduct.name,

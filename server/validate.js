@@ -96,7 +96,7 @@ export function validateCustomer(body, { pickup = false } = {}) {
  * @returns {{lat: number|null, lng: number|null}|null} les coordonnées
  *   (à null quand le client n'a rien pointé), ou null si elles sont invalides.
  */
-function normalizePin(rawLat, rawLng) {
+export function normalizePin(rawLat, rawLng) {
   if (rawLat === undefined || rawLat === null || rawLat === '') {
     return { lat: null, lng: null };
   }
@@ -187,6 +187,19 @@ export function validateProduct(body, { units, categories, icons, partial = fals
     return { ok: false, field: 'min', code: 'min_above_max' };
   }
 
+  /* Prix soldé : facultatif, 0 = aucune réduction en cours. Sa comparaison au
+   * prix normal se fait dans la route, qui connaît la valeur déjà enregistrée
+   * quand le formulaire n'envoie que l'un des deux. */
+  if (body?.salePrice !== undefined) {
+    const sale = Math.round(Number(body.salePrice));
+    if (!Number.isFinite(sale) || sale < 0 || sale > 1_000_000) {
+      return { ok: false, field: 'salePrice', code: 'sale_price_invalid' };
+    }
+    value.salePrice = sale;
+  } else if (!partial) {
+    value.salePrice = 0;
+  }
+
   if (body?.isBio !== undefined) value.isBio = Number(Boolean(body.isBio));
   if (body?.isAvailable !== undefined) value.isAvailable = Number(Boolean(body.isAvailable));
 
@@ -227,6 +240,15 @@ export function validatePromotion(body, { triggers, rewards, scopes, description
   }
   if (!rewards.includes(value.rewardType)) {
     return { ok: false, field: 'rewardType', code: 'promo_reward_invalid' };
+  }
+
+  // Contient le produit : seul le produit compte, la quantité reste à 0.
+  if (value.triggerType === 'contains') {
+    const productId = Number(body?.triggerProductId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return { ok: false, field: 'triggerProductId', code: 'promo_trigger_product_required' };
+    }
+    value.triggerProductId = productId;
   }
 
   if (value.triggerType === 'product') {

@@ -138,6 +138,17 @@
         <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
           <form class="panel" id="settings-form" style="max-width: 560px" novalidate>
             <h2 class="panel__title">
+              <span data-icon="phone"></span>
+              <span data-i18n="admin.secContact"></span>
+            </h2>
+            <div class="field" data-field="shopPhone">
+              <label class="field__label" for="s-shop-phone" data-i18n="admin.shopPhone"></label>
+              <input type="tel" id="s-shop-phone" name="shopPhone" maxlength="20"
+                     data-i18n-placeholder="admin.shopPhonePh">
+              <span class="field__error" data-error-for="shopPhone"></span>
+            </div>
+
+            <h2 class="panel__title" style="margin-block-start: var(--space-5)">
               <span data-icon="truck"></span>
               <span data-i18n="admin.secDelivery"></span>
             </h2>
@@ -194,6 +205,63 @@
                         data-i18n-placeholder="admin.pickupPlacePh"></textarea>
               <span class="field__error" data-error-for="pickupPlace"></span>
             </div>
+
+            <div class="field map-field" data-field="pickupPin">
+              <span class="field__label" id="s-pin-label">
+                <span data-i18n="admin.pickupMap"></span>
+                <span class="badge badge--soft" data-i18n="form.pinOptional"></span>
+              </span>
+
+              <button type="button" class="btn btn--ghost btn--block" id="s-pin-open">
+                <span data-icon="pin"></span>
+                <span data-i18n="form.pinOpen"></span>
+              </button>
+
+              <div class="map-picker" id="s-pin-picker" hidden>
+                <div class="map" id="s-pin-map" tabindex="0" role="application"
+                     aria-describedby="s-pin-help" data-i18n-aria="admin.pickupMap">
+                  <div class="map__crosshair" aria-hidden="true">
+                    <span data-icon="pin"></span>
+                  </div>
+                  <div class="map__zoom">
+                    <button type="button" data-map-zoom="1" data-i18n-aria="form.pinZoomIn">+</button>
+                    <button type="button" data-map-zoom="-1" data-i18n-aria="form.pinZoomOut">−</button>
+                  </div>
+                  <p class="map__credit">
+                    ©&nbsp;<a href="https://www.openstreetmap.org/copyright" target="_blank"
+                              rel="noopener">OpenStreetMap</a>
+                  </p>
+                </div>
+
+                <p class="field__hint" id="s-pin-help" data-i18n="admin.pickupMapHelp"></p>
+
+                <div class="map-picker__actions">
+                  <button type="button" class="btn btn--sm" id="s-pin-locate">
+                    <span data-icon="target"></span>
+                    <span data-i18n="form.pinLocate"></span>
+                  </button>
+                  <button type="button" class="btn btn--sm btn--accent" id="s-pin-confirm">
+                    <span data-icon="check"></span>
+                    <span data-i18n="form.pinConfirm"></span>
+                  </button>
+                  <button type="button" class="btn btn--sm btn--ghost" id="s-pin-cancel" data-i18n="form.pinCancel"></button>
+                </div>
+              </div>
+
+              <div class="map-pinned" id="s-pin-summary" hidden>
+                <span data-icon="pin"></span>
+                <span class="map-pinned__text">
+                  <strong data-i18n="form.pinSaved"></strong>
+                  <span class="map-pinned__coords" id="s-pin-coords" dir="ltr"></span>
+                </span>
+                <button type="button" class="btn btn--sm btn--ghost" id="s-pin-clear" data-i18n="form.pinClear"></button>
+              </div>
+
+              <input type="hidden" name="pickupLat" id="s-pin-lat">
+              <input type="hidden" name="pickupLng" id="s-pin-lng">
+              <span class="field__error" data-error-for="pickupPin"></span>
+            </div>
+
             <h2 class="panel__title" style="margin-block-start: var(--space-5)">
               <span data-icon="tag"></span>
               <span data-i18n="admin.secAnnouncement"></span>
@@ -261,17 +329,6 @@
               <textarea id="p-description" name="description" maxlength="300" dir="auto"></textarea>
             </div>
           </div>
-
-          <div class="switch-row">
-            <label class="switch">
-              <input type="checkbox" id="p-bio" name="isBio">
-              <span data-i18n="p.bio"></span>
-            </label>
-            <label class="switch">
-              <input type="checkbox" id="p-available" name="isAvailable" checked>
-              <span data-i18n="p.available"></span>
-            </label>
-          </div>
         </fieldset>
 
         <fieldset class="form-section">
@@ -283,6 +340,13 @@
                      aria-describedby="p-price-hint">
               <span class="field__hint" id="p-price-hint" data-i18n="p.priceHint"></span>
               <span class="field__error" data-error-for="price"></span>
+            </div>
+            <div class="field" data-field="salePrice">
+              <label class="field__label" for="p-sale-price" data-i18n="p.salePrice"></label>
+              <input type="number" id="p-sale-price" name="salePrice" min="0" max="1000" step="0.001"
+                     aria-describedby="p-sale-price-hint">
+              <span class="field__hint" id="p-sale-price-hint" data-i18n="p.salePriceHint"></span>
+              <span class="field__error" data-error-for="salePrice"></span>
             </div>
             <div class="field" data-field="stock">
               <label class="field__label" for="p-stock" data-i18n="p.stock"></label>
@@ -397,7 +461,7 @@
               <select id="promo-trigger-type" name="triggerType"></select>
               <span class="field__error" data-error-for="triggerType"></span>
             </div>
-            <div class="field" data-field="triggerProductId" data-when-trigger="product">
+            <div class="field" data-field="triggerProductId" data-when-trigger="product contains">
               <label class="field__label" for="promo-trigger-product" data-i18n="promo.triggerProductLabel"></label>
               <select id="promo-trigger-product" name="triggerProductId"></select>
               <span class="field__hint" data-i18n="promo.triggerProductHint"></span>

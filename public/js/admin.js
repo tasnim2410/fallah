@@ -6,7 +6,7 @@ import {
   initShell, api, getConfig, toast, esc,
   describePromotion, autoDescribePromotion, promotionCondition, promotionReward, promotionCap,
 } from './app.js';
-import { mapsLink } from './map.js';
+import { createMap, locateMe, mapsLink, DEFAULT_CENTER } from './map.js';
 
 const TOKEN_KEY = 'fallah.adminToken';
 const STATUSES = ['pending', 'confirmed', 'preparing', 'on_the_way', 'delivered', 'cancelled'];
@@ -284,8 +284,10 @@ function renderProducts() {
             p.farmer ? ` · ${esc(p.farmer)}` : ''
           }</small>
         </td>
-        <td><input type="number" data-price value="${p.price / 1000}" min="0.1" max="1000" step="0.001"
-                   aria-label="${esc(t('admin.pPrice'))}"></td>
+        <td><input type="number" data-price value="${p.basePrice / 1000}" min="0.1" max="1000" step="0.001"
+                   aria-label="${esc(t('admin.pPrice'))}">${
+          p.salePrice ? `<small class="muted">${esc(money(p.salePrice))}</small>` : ''
+        }</td>
         <td><input type="number" data-stock value="${p.stock}" min="0" max="100000" step="0.5"
                    aria-label="${esc(t('admin.pStock'))}"></td>
         <td>
@@ -436,7 +438,8 @@ function openProductDialog(product = null) {
   f.description.value = product?.description || '';
   f.category.value = product?.category || productCategories[0];
   f.unit.value = product?.unit || 'kg';
-  f.price.value = (product?.price ?? 2000) / 1000;
+  f.price.value = (product?.basePrice ?? 2000) / 1000;
+  f.salePrice.value = product?.salePrice ? product.salePrice / 1000 : '';
   f.stock.value = product?.stock ?? 50;
   f.step.value = product?.step ?? 0.5;
   f.min.value = product?.min ?? 1;
@@ -444,8 +447,6 @@ function openProductDialog(product = null) {
   f.farmer.value = product?.farmer || '';
   f.region.value = product?.region || '';
   f.harvested.value = product?.harvested || '';
-  f.isBio.checked = Boolean(product?.isBio);
-  f.isAvailable.checked = product ? Boolean(product.isAvailable) : true;
 
   renderPhotoPreview();
   dialog.showModal();
@@ -484,9 +485,9 @@ productForm.addEventListener('submit', async (event) => {
     farmer: data.get('farmer'), region: data.get('region'), harvested: data.get('harvested'),
     category: data.get('category'), unit: data.get('unit'), icon: chosenIcon,
     price: Math.round(Number(data.get('price')) * 1000), stock: Number(data.get('stock')),
+    // Champ vide = pas de réduction sur ce produit.
+    salePrice: Math.round(Number(data.get('salePrice')) * 1000) || 0,
     step: Number(data.get('step')), min: Number(data.get('min')), max: Number(data.get('max')),
-    isBio: productForm.elements.isBio.checked,
-    isAvailable: productForm.elements.isAvailable.checked,
   };
 
   const saveBtn = document.getElementById('dialog-save');
@@ -544,8 +545,92 @@ const settingsForm = document.getElementById('settings-form');
 /** Réglages chargés depuis le serveur (null tant qu'ils ne le sont pas). */
 let settings = null;
 
+/* --------------------- Point de retrait sur la carte --------------------- */
+
+const sPinOpen = document.getElementById('s-pin-open');
+const sPinPicker = document.getElementById('s-pin-picker');
+const sPinSummary = document.getElementById('s-pin-summary');
+const sPinCoords = document.getElementById('s-pin-coords');
+const sPinLat = document.getElementById('s-pin-lat');
+const sPinLng = document.getElementById('s-pin-lng');
+const sPinLocate = document.getElementById('s-pin-locate');
+
+let sMap = null;
+/** Position visée par le repère tant que le vendeur n'a pas validé. */
+let sDraftPin = null;
+/** Position validée pour le lieu de retrait (null = aucun point). */
+let sSavedPin = null;
+
+const formatPinCoords = (pin) => `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`;
+
+function renderPickupPinState() {
+  const has = Boolean(sSavedPin);
+  sPinSummary.hidden = !has;
+  if (has) sPinCoords.textContent = formatPinCoords(sSavedPin);
+  sPinLat.value = has ? String(sSavedPin.lat) : '';
+  sPinLng.value = has ? String(sSavedPin.lng) : '';
+  sPinOpen.querySelector('span:last-child').textContent = t(has ? 'form.pinChange' : 'form.pinOpen');
+}
+
+function openPickupPicker() {
+  sPinPicker.hidden = false;
+  sPinOpen.hidden = true;
+
+  if (!sMap) {
+    sMap = createMap(document.getElementById('s-pin-map'), {
+      onMove: (position) => { sDraftPin = position; },
+    });
+    for (const button of sPinPicker.querySelectorAll('[data-map-zoom]')) {
+      button.addEventListener('click', () => sMap.zoomBy(Number(button.dataset.mapZoom)));
+    }
+  }
+
+  const start = sSavedPin || DEFAULT_CENTER;
+  sMap.setView(start.lat, start.lng, sSavedPin ? 17 : DEFAULT_CENTER.zoom);
+  // La carte vient d'être révélée : ses dimensions n'étaient pas connues avant.
+  requestAnimationFrame(() => sMap.refresh());
+}
+
+function closePickupPicker() {
+  sPinPicker.hidden = true;
+  sPinOpen.hidden = false;
+  sDraftPin = null;
+}
+
+sPinOpen.addEventListener('click', openPickupPicker);
+
+document.getElementById('s-pin-confirm').addEventListener('click', () => {
+  sSavedPin = sDraftPin || sMap?.center() || null;
+  renderPickupPinState();
+  closePickupPicker();
+});
+
+document.getElementById('s-pin-cancel').addEventListener('click', closePickupPicker);
+
+document.getElementById('s-pin-clear').addEventListener('click', () => {
+  sSavedPin = null;
+  renderPickupPinState();
+});
+
+sPinLocate.addEventListener('click', async () => {
+  const label = sPinLocate.querySelector('span:last-child');
+  sPinLocate.disabled = true;
+  label.textContent = t('form.pinLocating');
+
+  const position = await locateMe();
+
+  sPinLocate.disabled = false;
+  label.textContent = t('form.pinLocate');
+  if (!position) {
+    toast(t('form.pinDenied'), 'error');
+    return;
+  }
+  sMap.setView(position.lat, position.lng, 17);
+});
+
 function renderSettings() {
   if (!settings) return;
+  settingsForm.elements.shopPhone.value = (settings.shopPhone || '').replace(/^\+216/, '');
   settingsForm.elements.delivery.value = settings.delivery / 1000;
   settingsForm.elements.freeDeliveryFrom.value = settings.freeDeliveryFrom / 1000;
   settingsForm.elements.alwaysFree.checked = Boolean(settings.alwaysFree);
@@ -557,6 +642,10 @@ function renderSettings() {
   settingsForm.elements.deliveryNote.value = settings.deliveryNote || '';
   settingsForm.elements.pickupEnabled.checked = Boolean(settings.pickupEnabled);
   settingsForm.elements.pickupPlace.value = settings.pickupPlace || '';
+  sSavedPin = settings.pickupLat != null && settings.pickupLng != null
+    ? { lat: settings.pickupLat, lng: settings.pickupLng }
+    : null;
+  renderPickupPinState();
   toggleSettingsFields();
 }
 
@@ -596,6 +685,7 @@ settingsForm.addEventListener('submit', async (event) => {
     method: 'PATCH',
     token,
     body: {
+      shopPhone: settingsForm.elements.shopPhone.value,
       delivery: Math.round(Number(settingsForm.elements.delivery.value) * 1000),
       freeDeliveryFrom: Math.round(Number(settingsForm.elements.freeDeliveryFrom.value) * 1000),
       alwaysFree: settingsForm.elements.alwaysFree.checked,
@@ -607,6 +697,8 @@ settingsForm.addEventListener('submit', async (event) => {
       deliveryNote: settingsForm.elements.deliveryNote.value,
       pickupPlace: settingsForm.elements.pickupPlace.value,
       pickupEnabled: settingsForm.elements.pickupEnabled.checked,
+      pickupLat: sSavedPin ? sSavedPin.lat : null,
+      pickupLng: sSavedPin ? sSavedPin.lng : null,
     },
   });
 
@@ -748,11 +840,15 @@ function fillProductSelect(id, selected) {
 /** Produit de référence déjà signalé dans la liste (-1 = liste jamais rendue). */
 let markedReferenceId = -1;
 
+/** Les deux déclencheurs qui visent un produit de référence. */
+const triggerUsesProduct = () =>
+  ['product', 'contains'].includes(promoForm.elements.triggerType.value);
+
 function renderRewardProducts(selected = []) {
   const chosen = new Set(selected);
   /* Le produit de référence est signalé dans la liste : le vendeur voit d'un
    * coup d'œil s'il remise le produit qu'il exige, ou bien un autre. */
-  const referenceId = promoForm.elements.triggerType.value === 'product'
+  const referenceId = triggerUsesProduct()
     ? Number(promoForm.elements.triggerProductId.value)
     : 0;
   markedReferenceId = referenceId;
@@ -793,7 +889,7 @@ function togglePromoFields() {
   /* Le badge « référence » suit le produit choisi à l'étape 1. On ne redessine
    * la liste que si ce produit a changé : la redessiner à chaque frappe
    * ferait perdre le focus de la case qu'on vient de cocher. */
-  const referenceId = promoForm.elements.triggerType.value === 'product'
+  const referenceId = triggerUsesProduct()
     ? Number(promoForm.elements.triggerProductId.value)
     : 0;
   if (referenceId !== markedReferenceId) renderRewardProducts(selectedRewardProducts());

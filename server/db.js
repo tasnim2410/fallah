@@ -22,6 +22,7 @@ db.exec(`
     icon           TEXT    NOT NULL DEFAULT 'leaf',
     unit           TEXT    NOT NULL DEFAULT 'kg',
     price_millimes INTEGER NOT NULL,
+    sale_price_millimes INTEGER NOT NULL DEFAULT 0,
     step_qty       REAL    NOT NULL DEFAULT 0.5,
     min_qty        REAL    NOT NULL DEFAULT 1,
     max_qty        REAL    NOT NULL DEFAULT 30,
@@ -142,6 +143,8 @@ function migrateRewardProductIds() {
 }
 
 addMissingColumns('products', { image_path: `TEXT NOT NULL DEFAULT ''` });
+/* Prix soldé du produit (0 = pas de réduction en cours). */
+addMissingColumns('products', { sale_price_millimes: 'INTEGER NOT NULL DEFAULT 0' });
 // Point posé sur la carte au moment de la commande (facultatif, donc nullable).
 addMissingColumns('orders', { lat: 'REAL', lng: 'REAL' });
 addMissingColumns('orders', {
@@ -180,6 +183,7 @@ export const PRODUCT_ICONS = [
 ];
 
 export const SHOP = {
+  shopPhone: '',
   deliveryMillimes: 5000,
   freeDeliveryFromMillimes: 60000,
   deliveryAlwaysFree: 0,
@@ -195,6 +199,9 @@ export const SHOP = {
   /* Retrait sur place : le client vient chercher sa commande lui-même. */
   pickupEnabled: 0,
   pickupPlace: '',
+  // Point posé sur la carte : sert à générer le bouton « Google Maps » du client.
+  pickupLat: null,
+  pickupLng: null,
 };
 
 /** Longueurs maximales des textes libres saisis par le vendeur. */
@@ -218,10 +225,10 @@ export const SHOP_LIMITS = {
 /** Réglages chiffrés modifiables depuis le tableau de bord. */
 const NUMBER_SETTINGS = [
   'deliveryMillimes', 'freeDeliveryFromMillimes', 'deliveryAlwaysFree', 'announcementActive',
-  'dailyDelivery', 'pickupEnabled',
+  'dailyDelivery', 'pickupEnabled', 'pickupLat', 'pickupLng',
 ];
 /** Réglages en texte libre (annonce, note de livraison, lieu de retrait, date de la prochaine tournée). */
-const TEXT_SETTINGS = ['announcementTitle', 'announcementBody', 'deliveryNote', 'pickupPlace', 'nextDeliveryDate'];
+const TEXT_SETTINGS = ['shopPhone', 'announcementTitle', 'announcementBody', 'deliveryNote', 'pickupPlace', 'nextDeliveryDate'];
 /** Réglages vrai/faux, exposés comme des booléens. */
 const FLAG_SETTINGS = ['deliveryAlwaysFree', 'announcementActive', 'dailyDelivery', 'pickupEnabled'];
 

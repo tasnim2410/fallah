@@ -83,6 +83,9 @@ function productCard(p) {
     <article class="product-card${out ? ' product-card--out' : ''}" data-product="${p.id}">
       <div class="product-card__media${p.image ? ' product-card__media--photo' : ''}">
         <div class="product-card__badges">
+          ${p.salePrice
+            ? `<span class="badge badge--sale">−${Math.round((1 - p.salePrice / p.basePrice) * 100)}%</span>`
+            : ''}
           ${p.isBio ? `<span class="badge badge--bio">${esc(t('product.bio'))}</span>` : ''}
           ${out
             ? `<span class="badge badge--out">${esc(t('product.out'))}</span>`
@@ -103,7 +106,8 @@ function productCard(p) {
           : ''}
         <p class="product-card__desc">${esc(p.description)}</p>
         <div class="product-card__price">
-          ${esc(money(p.price))} <small>/ ${esc(t(`unit.${p.unit}`))}</small>
+          ${p.salePrice ? `<del>${esc(money(p.basePrice))}</del> ` : ''}${esc(money(p.price))}
+          <small>/ ${esc(t(`unit.${p.unit}`))}</small>
         </div>
         ${out
           ? `<button type="button" class="btn btn--ghost btn--block" disabled>${esc(t('product.out'))}</button>`

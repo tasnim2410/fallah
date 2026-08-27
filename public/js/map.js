@@ -47,7 +47,8 @@ function worldYToLat(y, zoom) {
 export function createMap(host, { onMove } = {}) {
   const layer = document.createElement('div');
   layer.className = 'map__tiles';
-  host.append(layer);
+  // En premier dans le DOM : sous le repère, les boutons de zoom et le crédit OSM.
+  host.prepend(layer);
 
   let zoom = DEFAULT_CENTER.zoom;
   // Centre de la carte, en pixels monde au niveau de zoom courant.

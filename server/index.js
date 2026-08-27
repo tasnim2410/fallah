@@ -12,11 +12,12 @@ import {
 import { seedProducts } from './seed.js';
 import {
   GOVERNORATES, validateCustomer, validateCartShape, validateProduct, validatePromotion,
-  slugify, detectImage,
+  slugify, detectImage, normalizePhone, normalizePin,
 } from './validate.js';
 import {
   computeDiscounts, resolveDelivery, TRIGGER_TYPES, REWARD_TYPES, REWARD_SCOPES,
 } from '../public/js/promo.js';
+import { mapsLink } from '../public/js/map.js';
 
 try {
   process.loadEnvFile();
@@ -30,7 +31,8 @@ const PORT = Number(process.env.PORT) || 3000;
 /** Port choisi explicitement : on ne se rabattra pas sur un autre. */
 const PORT_IS_EXPLICIT = Boolean(process.env.PORT);
 const ADMIN_PASSWORD = process.env.FALLAH_ADMIN_PASSWORD || 'fallah2026';
-const SHOP_PHONE = process.env.FALLAH_SHOP_PHONE || '+21600000000';
+/* Numéro affiché tant que le vendeur n'en a pas choisi un dans le tableau de bord. */
+const SHOP_PHONE_DEFAULT = process.env.FALLAH_SHOP_PHONE || '+21600000000';
 
 /* On ne seed qu'au tout premier démarrage (catalogue vide) : au-delà, un
  * produit supprimé par le vendeur ne doit jamais réapparaître tout seul. */
@@ -257,7 +259,11 @@ const publicProduct = (row) => ({
   icon: row.icon,
   image: row.image_path || '',
   unit: row.unit,
-  price: row.price_millimes,
+  /* `price` est toujours ce que le client paie : le prix soldé s'il y en a un.
+   * `basePrice` ne sert qu'à barrer l'ancien prix et à remplir le formulaire. */
+  price: row.sale_price_millimes || row.price_millimes,
+  basePrice: row.price_millimes,
+  salePrice: row.sale_price_millimes,
   step: row.step_qty,
   min: row.min_qty,
   max: row.max_qty,
@@ -341,7 +347,7 @@ function getConfig(res) {
   const shop = shopSettings();
   const announcementReady = shop.announcementActive && Boolean(shop.announcementTitle || shop.announcementBody);
   sendJson(res, 200, {
-    shopPhone: SHOP_PHONE,
+    shopPhone: shop.shopPhone || SHOP_PHONE_DEFAULT,
     delivery: shop.deliveryMillimes,
     freeDeliveryFrom: shop.freeDeliveryFromMillimes,
     deliveryAlwaysFree: shop.deliveryAlwaysFree,
@@ -359,6 +365,9 @@ function getConfig(res) {
       deliveryNote: shop.deliveryNote,
       pickupEnabled: shop.pickupEnabled,
       pickupPlace: shop.pickupPlace,
+      pickupMapUrl: shop.pickupLat != null && shop.pickupLng != null
+        ? mapsLink(shop.pickupLat, shop.pickupLng)
+        : '',
     },
   });
 }
@@ -423,16 +432,18 @@ async function createOrder(req, res, ip) {
     if (Math.abs(steps - Math.round(steps)) > 0.01) {
       return sendJson(res, 400, { error: 'qty_step_invalid', productId, step: p.step_qty });
     }
-    const lineTotal = Math.round(p.price_millimes * qty);
+    // Le prix soldé, quand il existe, est celui qui est facturé.
+    const unitPrice = p.sale_price_millimes || p.price_millimes;
+    const lineTotal = Math.round(unitPrice * qty);
     subtotal += lineTotal;
-    lines.push({ p, qty, lineTotal });
+    lines.push({ p, qty, lineTotal, unitPrice });
   }
 
   /* Remises et frais de livraison sortent tous de la base : le client peut
    * afficher ce qu'il veut, seul ce calcul-ci fixe le montant à payer. */
   const shop = shopNow;
-  const cartLines = lines.map(({ p, qty, lineTotal }) => ({
-    productId: p.id, qty, unitPrice: p.price_millimes, lineTotal,
+  const cartLines = lines.map(({ p, qty, lineTotal, unitPrice }) => ({
+    productId: p.id, qty, unitPrice, lineTotal,
   }));
   const promo = computeDiscounts(cartLines, listPromotions({ activeOnly: true }));
   const discount = promo.discount;
@@ -472,8 +483,8 @@ async function createOrder(req, res, ip) {
       reference, c.name, c.phone, c.governorate, c.address, c.lat, c.lng, c.note, c.preferredTime,
       c.lang, subtotal, discount, JSON.stringify(promo.applied), delivery, total, fulfilment, now, now
     );
-    for (const { p, qty, lineTotal } of lines) {
-      insertItem.run(Number(lastInsertRowid), p.id, p.name, p.unit, qty, p.price_millimes, lineTotal);
+    for (const { p, qty, lineTotal, unitPrice } of lines) {
+      insertItem.run(Number(lastInsertRowid), p.id, p.name, p.unit, qty, unitPrice, lineTotal);
       decStock.run(qty, p.id);
     }
     db.exec('COMMIT');
@@ -487,7 +498,7 @@ async function createOrder(req, res, ip) {
   console.log(`[commande] ${reference} — ${c.name} (${c.phone}) — ${(total / 1000).toFixed(3)} DT — à confirmer par téléphone`);
   sendJson(res, 201, {
     reference, status: 'pending', subtotal, discount, discounts: promo.applied,
-    delivery, total, fulfilment, shopPhone: SHOP_PHONE,
+    delivery, total, fulfilment, shopPhone: shop.shopPhone || SHOP_PHONE_DEFAULT,
   });
 }
 
@@ -574,6 +585,7 @@ const shopPayload = () => {
   const shop = shopSettings();
   return {
     settings: {
+      shopPhone: shop.shopPhone || SHOP_PHONE_DEFAULT,
       delivery: shop.deliveryMillimes,
       freeDeliveryFrom: shop.freeDeliveryFromMillimes,
       alwaysFree: shop.deliveryAlwaysFree,
@@ -585,6 +597,8 @@ const shopPayload = () => {
       deliveryNote: shop.deliveryNote,
       pickupEnabled: shop.pickupEnabled,
       pickupPlace: shop.pickupPlace,
+      pickupLat: shop.pickupLat,
+      pickupLng: shop.pickupLng,
     },
     limits: {
       delivery: SHOP_LIMITS.deliveryMillimes,
@@ -611,6 +625,16 @@ async function adminUpdateSettings(req, res) {
   }
 
   const values = {};
+  if (body?.shopPhone !== undefined) {
+    const raw = String(body.shopPhone || '').trim();
+    if (!raw) {
+      values.shopPhone = '';
+    } else {
+      const normalized = normalizePhone(raw);
+      if (!normalized) return fail(res, 400, 'shop_phone_invalid', 'shopPhone');
+      values.shopPhone = `+216${normalized}`;
+    }
+  }
   if (body?.delivery !== undefined) {
     const delivery = Number(body.delivery);
     if (!checkMillimes(delivery, SHOP_LIMITS.deliveryMillimes)) {
@@ -654,6 +678,12 @@ async function adminUpdateSettings(req, res) {
   }
   if (body?.pickupPlace !== undefined) {
     values.pickupPlace = cleanAnnouncement(body.pickupPlace, TEXT_LIMITS.pickupPlace, true);
+  }
+  if (body?.pickupLat !== undefined || body?.pickupLng !== undefined) {
+    const pin = normalizePin(body.pickupLat, body.pickupLng);
+    if (pin === null) return fail(res, 400, 'pickup_pin_invalid', 'pickupPin');
+    values.pickupLat = pin.lat;
+    values.pickupLng = pin.lng;
   }
   if (body?.pickupEnabled !== undefined) {
     const wanted = Boolean(body.pickupEnabled);
@@ -813,7 +843,8 @@ function uniqueSlug(base, excludeId = 0) {
 const PRODUCT_COLUMNS = {
   name: 'name', description: 'description', farmer: 'farmer', region: 'region', harvested: 'harvested',
   category: 'category', unit: 'unit', icon: 'icon',
-  price: 'price_millimes', stock: 'stock_qty', step: 'step_qty', min: 'min_qty', max: 'max_qty',
+  price: 'price_millimes', salePrice: 'sale_price_millimes',
+  stock: 'stock_qty', step: 'step_qty', min: 'min_qty', max: 'max_qty',
   isBio: 'is_bio', isAvailable: 'is_available',
 };
 
@@ -829,6 +860,10 @@ async function adminCreateProduct(req, res) {
   if (!checked.ok) return fail(res, 400, checked.code, checked.field);
 
   const v = checked.value;
+  // Un prix soldé au-dessus du prix normal ne serait plus une réduction.
+  if (v.salePrice > 0 && v.salePrice >= v.price) {
+    return fail(res, 400, 'sale_price_above_price', 'salePrice');
+  }
   const slug = uniqueSlug(slugify(v.name));
   // Le nouveau produit se place en fin de catalogue.
   const { last } = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS last FROM products').get();
@@ -865,6 +900,13 @@ async function adminUpdateProduct(req, res, id) {
   const min = v.min ?? product.min_qty;
   const max = v.max ?? product.max_qty;
   if (min > max) return fail(res, 400, 'min_above_max', 'min');
+
+  // Idem pour le prix soldé, qui peut arriver sans le prix normal (ou l'inverse).
+  const price = v.price ?? product.price_millimes;
+  const salePrice = v.salePrice ?? product.sale_price_millimes;
+  if (salePrice > 0 && salePrice >= price) {
+    return fail(res, 400, 'sale_price_above_price', 'salePrice');
+  }
 
   const columns = Object.keys(PRODUCT_COLUMNS).filter((key) => v[key] !== undefined);
   if (columns.length) {

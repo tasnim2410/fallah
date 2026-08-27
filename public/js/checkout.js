@@ -38,6 +38,8 @@ function renderFulfilment() {
   fulfilmentPanel.hidden = !canPickup;
   if (!canPickup) fulfilment = 'delivery';
 
+  const pickupMapUrl = config?.fulfilment?.pickupMapUrl || '';
+
   const options = [
     {
       value: 'delivery',
@@ -48,6 +50,7 @@ function renderFulfilment() {
       value: 'pickup',
       label: t('fulfil.pickup'),
       detail: config?.fulfilment?.pickupPlace || '',
+      mapUrl: pickupMapUrl,
     },
   ];
 
@@ -58,6 +61,11 @@ function renderFulfilment() {
         <span>
           <strong>${esc(o.label)}</strong>
           ${o.detail ? `<small class="radio-card__detail">${esc(o.detail)}</small>` : ''}
+          ${o.mapUrl
+            ? `<a class="btn btn--sm btn--ghost" href="${esc(o.mapUrl)}" target="_blank" rel="noopener">
+                 ${icon('pin')}<span>${esc(t('fulfil.pickupMap'))}</span>
+               </a>`
+            : ''}
         </span>
       </label>`
     )

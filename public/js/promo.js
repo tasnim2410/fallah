@@ -6,6 +6,7 @@
  *
  * Une promotion = une condition (« déclencheur ») + un avantage (« récompense ») :
  *   always   → toutes les commandes
+ *   contains → le panier contient {triggerProductId}, quelle que soit la quantité
  *   product  → le panier contient au moins {triggerQty} de {triggerProductId}
  *   subtotal → le sous-total atteint {triggerAmount}
  * puis :
@@ -17,7 +18,7 @@
  * ce qui permet « 5 kg de tomates achetés → 20 % sur l'ail et les oignons ».
  */
 
-export const TRIGGER_TYPES = ['always', 'product', 'subtotal'];
+export const TRIGGER_TYPES = ['always', 'contains', 'product', 'subtotal'];
 export const REWARD_TYPES = ['percent', 'amount', 'free_delivery'];
 export const REWARD_SCOPES = ['product', 'cart'];
 
@@ -29,6 +30,11 @@ function qtyOf(lines, productId) {
 /** La condition de la promotion est-elle remplie par ce panier ? */
 export function promotionApplies(promo, lines, subtotal) {
   if (!promo.active) return false;
+  // « Livraison offerte si la commande contient des dattes » : aucune quantité exigée.
+  if (promo.triggerType === 'contains') {
+    if (!promo.triggerProductId) return false;
+    return qtyOf(lines, promo.triggerProductId) > 0;
+  }
   if (promo.triggerType === 'product') {
     if (!promo.triggerProductId || promo.triggerQty <= 0) return false;
     return qtyOf(lines, promo.triggerProductId) >= promo.triggerQty;

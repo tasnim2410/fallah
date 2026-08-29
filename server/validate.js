@@ -148,7 +148,7 @@ const NUMERIC_FIELDS = {
   stock: { min: 0, max: 100_000 },
   step: { min: 0.1, max: 50 },
   min: { min: 0.1, max: 100 },
-  max: { min: 0.5, max: 1000 },
+  max: { min: 0.5, max: Infinity },
 };
 
 /**

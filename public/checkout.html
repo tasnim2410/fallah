@@ -111,12 +111,25 @@
                 </span>
 
                 <div id="pin-controls">
-                  <button type="button" class="btn btn--ghost btn--block" id="pin-open">
-                    <span data-icon="pin"></span>
-                    <span data-i18n="form.pinOpen"></span>
-                  </button>
+                  <div class="pin-choice" id="pin-choice">
+                    <button type="button" class="btn btn--ghost btn--block" id="pin-use-location">
+                      <span data-icon="target"></span>
+                      <span data-i18n="form.pinUseLocation"></span>
+                    </button>
+                    <button type="button" class="btn btn--ghost btn--block" id="pin-open">
+                      <span data-icon="pin"></span>
+                      <span data-i18n="form.pinOpen"></span>
+                    </button>
+                  </div>
 
                   <div class="map-picker" id="pin-picker" hidden>
+                    <div class="search-field map-picker__search">
+                      <span data-icon="search"></span>
+                      <label class="visually-hidden" for="pin-search-input" data-i18n="form.pinSearchLabel"></label>
+                      <input type="search" id="pin-search-input" data-i18n-placeholder="form.pinSearchPh" autocomplete="off">
+                      <ul class="map-picker__results" id="pin-search-results" hidden></ul>
+                    </div>
+
                     <div class="map" id="pin-map" tabindex="0" role="application"
                          aria-describedby="pin-help" data-i18n-aria="form.pin">
                       <div class="map__crosshair" aria-hidden="true">

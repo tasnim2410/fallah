@@ -1152,7 +1152,49 @@ table.admin-table input { min-height: 40px; max-width: 120px; }
 
 .map-field .field__label { display: flex; align-items: center; gap: var(--space-2); }
 
+.pin-choice { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pin-choice .btn { flex: 1 1 200px; }
+
 .map-picker { margin-block-start: var(--space-3); }
+
+.map-picker__search { margin-block-end: var(--space-3); }
+
+.map-picker__results {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 4px);
+  z-index: 5;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  background: var(--card);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.map-picker__results li + li { border-block-start: 1px solid var(--border); }
+.map-picker__results button {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: .85rem;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+}
+.map-picker__results button:hover,
+.map-picker__results button:focus-visible { background: var(--primary-soft); }
+.map-picker__results-empty {
+  padding: var(--space-2) var(--space-3);
+  font-size: .85rem;
+  color: var(--muted-fg);
+}
 
 .map {
   position: relative;

@@ -162,6 +162,8 @@ function renderGovernorates() {
 
 /* ---------------------- Point sur la carte ----------------------- */
 
+const pinChoice = document.getElementById('pin-choice');
+const pinUseLocation = document.getElementById('pin-use-location');
 const pinOpen = document.getElementById('pin-open');
 const pinPicker = document.getElementById('pin-picker');
 const pinSummary = document.getElementById('pin-summary');
@@ -169,6 +171,8 @@ const pinCoords = document.getElementById('pin-coords');
 const pinLat = document.getElementById('pin-lat');
 const pinLng = document.getElementById('pin-lng');
 const pinLocate = document.getElementById('pin-locate');
+const pinSearchInput = document.getElementById('pin-search-input');
+const pinSearchResults = document.getElementById('pin-search-results');
 
 let map = null;
 /** Position visée par le repère tant que le client n'a pas validé. */
@@ -206,7 +210,7 @@ function renderPinState() {
 
 function openPicker() {
   pinPicker.hidden = false;
-  pinOpen.hidden = true;
+  pinChoice.hidden = true;
 
   if (!map) {
     map = createMap(document.getElementById('pin-map'), {
@@ -225,8 +229,10 @@ function openPicker() {
 
 function closePicker() {
   pinPicker.hidden = true;
-  pinOpen.hidden = false;
+  pinChoice.hidden = false;
   draftPin = null;
+  pinSearchInput.value = '';
+  hideSearchResults();
 }
 
 pinOpen.addEventListener('click', openPicker);
@@ -244,19 +250,30 @@ document.getElementById('pin-clear').addEventListener('click', () => {
   renderPinState();
 });
 
-pinLocate.addEventListener('click', async () => {
-  const label = pinLocate.querySelector('span:last-child');
-  pinLocate.disabled = true;
+/** Demande la position au navigateur, avec un état de chargement sur le bouton. */
+async function requestLocation(button, idleKey) {
+  const label = button.querySelector('span:last-child');
+  button.disabled = true;
   label.textContent = t('form.pinLocating');
 
   const position = await locateMe();
 
-  pinLocate.disabled = false;
-  label.textContent = t('form.pinLocate');
-  if (!position) {
-    toast(t('form.pinDenied'), 'error');
-    return;
-  }
+  button.disabled = false;
+  label.textContent = t(idleKey);
+  if (!position) toast(t('form.pinDenied'), 'error');
+  return position;
+}
+
+pinUseLocation.addEventListener('click', async () => {
+  const position = await requestLocation(pinUseLocation, 'form.pinUseLocation');
+  if (!position) return;
+  savedPin = position;
+  renderPinState();
+});
+
+pinLocate.addEventListener('click', async () => {
+  const position = await requestLocation(pinLocate, 'form.pinLocate');
+  if (!position) return;
   map.setView(position.lat, position.lng, 17);
 });
 
@@ -265,6 +282,65 @@ govSelect.addEventListener('change', () => {
   if (savedPin || pinPicker.hidden || !map) return;
   const center = governorateCenter();
   map.setView(center.lat, center.lng, DEFAULT_CENTER.zoom);
+});
+
+/* ------------------ Recherche d'adresse sur la carte -------------- */
+
+function hideSearchResults() {
+  pinSearchResults.hidden = true;
+  pinSearchResults.innerHTML = '';
+}
+
+/** Compteur de requêtes : ignore une réponse arrivée après une recherche plus récente. */
+let searchToken = 0;
+
+/** Recherche de lieux via Nominatim (OpenStreetMap), limitée à la Tunisie. */
+async function searchPlace(query) {
+  const q = query.trim();
+  if (q.length < 3) { hideSearchResults(); return; }
+
+  const token = ++searchToken;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=tn&accept-language=${lang}&q=${encodeURIComponent(q)}`;
+  let results = [];
+  try {
+    const res = await fetch(url);
+    if (res.ok) results = await res.json();
+  } catch {
+    // Pas de connexion ou service indisponible : le client garde la saisie manuelle.
+  }
+  if (token !== searchToken) return;
+
+  if (!results.length) {
+    pinSearchResults.innerHTML = `<li class="map-picker__results-empty">${esc(t('form.pinSearchEmpty'))}</li>`;
+    pinSearchResults.hidden = false;
+    return;
+  }
+
+  pinSearchResults.innerHTML = results
+    .map((r) => `<li><button type="button" data-lat="${esc(r.lat)}" data-lng="${esc(r.lon)}">${esc(r.display_name)}</button></li>`)
+    .join('');
+  pinSearchResults.hidden = false;
+}
+
+let searchTimer = null;
+pinSearchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => searchPlace(pinSearchInput.value), 600);
+});
+
+pinSearchInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  clearTimeout(searchTimer);
+  searchPlace(pinSearchInput.value);
+});
+
+pinSearchResults.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-lat]');
+  if (!button) return;
+  map.setView(Number(button.dataset.lat), Number(button.dataset.lng), 17);
+  hideSearchResults();
+  pinSearchInput.value = '';
 });
 
 /* --------------------------- Validation -------------------------- */

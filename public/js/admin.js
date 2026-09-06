@@ -162,7 +162,7 @@ function orderCard(order) {
           <strong>${esc(t(order.fulfilment === 'pickup' ? 'fulfil.pickup' : 'fulfil.delivery'))}</strong></div>
         <div class="order-card__field"><span>${esc(t('admin.time'))}</span>${esc(t(`form.time${order.preferredTime[0].toUpperCase()}${order.preferredTime.slice(1)}`))}</div>
         <div class="order-card__field"><span>${esc(t('admin.address'))}</span>
-          ${esc(governorateLabel(order.governorate))} — ${esc(order.address)}</div>
+          ${esc(governorateLabel(order.governorate))}${order.address ? ` — ${esc(order.address)}` : ''}</div>
         ${mapUrl
           ? `<div class="order-card__field"><span>${esc(t('admin.pin'))}</span>
                <a href="${esc(mapUrl)}" target="_blank" rel="noopener" dir="ltr">

@@ -69,14 +69,14 @@ export function validateCustomer(body, { pickup = false } = {}) {
     return { ok: false, field: 'governorate', code: 'governorate_invalid' };
   }
 
-  /* Au retrait sur place, il n'y a rien à livrer : l'adresse devient facultative
-   * (le client peut tout de même laisser une indication). */
+  /* Au retrait sur place, il n'y a rien à livrer : aucune localisation requise. */
   const address = cleanText(body?.address, 300);
-  if (!pickup && address.length < 10) return { ok: false, field: 'address', code: 'address_too_short' };
 
-  // Le point sur la carte reste facultatif : l'adresse écrite suffit à livrer.
+  // Sans adresse écrite, le point sur la carte est l'unique moyen de localiser
+  // le client : il devient obligatoire à la livraison.
   const pin = normalizePin(body?.lat, body?.lng);
-  if (pin === null) return { ok: false, field: 'address', code: 'pin_invalid' };
+  if (pin === null) return { ok: false, field: 'pin', code: 'pin_invalid' };
+  if (!pickup && pin.lat === null) return { ok: false, field: 'pin', code: 'pin_required' };
 
   // Le client peut coller un lien Google Maps à la place du point sur la carte.
   const mapUrl = normalizeMapUrl(body?.mapUrl);

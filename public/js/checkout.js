@@ -79,7 +79,6 @@ function applyFulfilment() {
   const pickup = fulfilment === 'pickup';
   addressPanel.hidden = pickup;
   // Un champ requis mais masqué bloquerait l'envoi du formulaire.
-  document.getElementById('address').required = !pickup;
   document.getElementById('governorate').required = !pickup;
   renderSummary();
 }
@@ -163,9 +162,6 @@ function renderGovernorates() {
 
 /* ---------------------- Point sur la carte ----------------------- */
 
-const addressInput = document.getElementById('address');
-const pinControls = document.getElementById('pin-controls');
-const pinLockedHint = document.getElementById('pin-locked-hint');
 const pinOpen = document.getElementById('pin-open');
 const pinPicker = document.getElementById('pin-picker');
 const pinSummary = document.getElementById('pin-summary');
@@ -173,15 +169,6 @@ const pinCoords = document.getElementById('pin-coords');
 const pinLat = document.getElementById('pin-lat');
 const pinLng = document.getElementById('pin-lng');
 const pinLocate = document.getElementById('pin-locate');
-
-/* Le point sur la carte (ou le lien collé) ne sert à rien sans adresse écrite :
- * on masque ces contrôles tant que le client n'a rien tapé, même approximatif. */
-function updatePinLock() {
-  const hasAddress = addressInput.value.trim().length > 0;
-  pinControls.hidden = !hasAddress;
-  pinLockedHint.hidden = hasAddress;
-}
-addressInput.addEventListener('input', updatePinLock);
 
 let map = null;
 /** Position visée par le repère tant que le client n'a pas validé. */
@@ -209,6 +196,12 @@ function renderPinState() {
   pinLat.value = has ? String(savedPin.lat) : '';
   pinLng.value = has ? String(savedPin.lng) : '';
   pinOpen.querySelector('span:last-child').textContent = t(has ? 'form.pinChange' : 'form.pinOpen');
+
+  if (has) {
+    const wrapper = document.getElementById('pin-field');
+    wrapper.classList.remove('has-error');
+    wrapper.querySelector('[data-error-for="pin"]').textContent = '';
+  }
 }
 
 function openPicker() {
@@ -299,10 +292,10 @@ function clearErrors() {
 function validateLocally(values) {
   if (values.name.trim().length < 3) return { field: 'name', code: 'err.name_too_short' };
   if (!/^[2-579]\d{7}$/.test(values.phone.replace(/\D/g, ''))) return { field: 'phone', code: 'err.phone_invalid' };
-  // Au retrait sur place, ni gouvernorat ni adresse ne sont demandés.
+  // Au retrait sur place, ni gouvernorat ni localisation ne sont demandés.
   if (values.fulfilment === 'pickup') return null;
   if (!values.governorate) return { field: 'governorate', code: 'err.governorate_invalid' };
-  if (values.address.trim().length < 10) return { field: 'address', code: 'err.address_too_short' };
+  if (values.lat == null || values.lng == null) return { field: 'pin', code: 'err.pin_required' };
   return null;
 }
 
@@ -332,9 +325,7 @@ form.addEventListener('submit', async (event) => {
     name: String(data.get('name') || ''),
     phone: String(data.get('phone') || ''),
     governorate: String(data.get('governorate') || ''),
-    address: String(data.get('address') || ''),
     ...pinValues(),
-    mapUrl: String(data.get('mapUrl') || ''),
     note: String(data.get('note') || ''),
     preferredTime: String(data.get('preferredTime') || 'any'),
     fulfilment,

@@ -103,37 +103,14 @@
                 <span class="field__error" data-error-for="governorate"></span>
               </div>
 
-              <div class="field" data-field="address">
-                <label class="field__label" for="address">
-                  <span data-i18n="form.address"></span> <span class="req" aria-hidden="true">*</span>
-                </label>
-                <textarea id="address" name="address" required maxlength="300"
-                          data-i18n-placeholder="form.addressPh" aria-describedby="address-hint"></textarea>
-                <span class="field__hint" id="address-hint" data-i18n="form.addressHint"></span>
-                <span class="field__error" data-error-for="address"></span>
-              </div>
-
-              <!-- Point sur la carte : facultatif, mais très utile au livreur. Verrouillé tant que
-                   le client n'a rien écrit dans l'adresse : un point seul ne suffit pas à livrer. -->
+              <!-- Le point sur la carte est l'unique moyen de localiser le client : pas
+                   d'adresse écrite, donc il est obligatoire (sauf retrait sur place). -->
               <div class="field map-field" data-field="pin" id="pin-field">
                 <span class="field__label" id="pin-label">
-                  <span data-i18n="form.pin"></span>
-                  <span class="badge badge--soft" data-i18n="form.pinOptional"></span>
+                  <span data-i18n="form.pin"></span> <span class="req" aria-hidden="true">*</span>
                 </span>
 
-                <p class="field__hint" id="pin-locked-hint" data-i18n="form.pinLocked"></p>
-
-                <div id="pin-controls" hidden>
-                  <div class="field" data-field="mapUrl">
-                    <label class="field__label" for="map-url" data-i18n="form.mapUrl"></label>
-                    <input type="url" id="map-url" name="mapUrl" maxlength="300" dir="ltr"
-                           data-i18n-placeholder="form.mapUrlPh">
-                    <span class="field__hint" data-i18n="form.mapUrlHint"></span>
-                    <span class="field__error" data-error-for="mapUrl"></span>
-                  </div>
-
-                  <p class="field__hint" data-i18n="form.or"></p>
-
+                <div id="pin-controls">
                   <button type="button" class="btn btn--ghost btn--block" id="pin-open">
                     <span data-icon="pin"></span>
                     <span data-i18n="form.pinOpen"></span>
@@ -182,6 +159,7 @@
 
                 <input type="hidden" name="lat" id="pin-lat">
                 <input type="hidden" name="lng" id="pin-lng">
+                <span class="field__error" data-error-for="pin"></span>
               </div>
             </div>
 

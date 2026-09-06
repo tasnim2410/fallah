@@ -448,7 +448,6 @@ function showSuccess(order, phone) {
   successView.hidden = false;
 
   document.getElementById('order-ref').textContent = order.reference;
-  document.getElementById('success-body').textContent = t('success.body', { phone });
   document.getElementById('track-link').href =
     `/track.html?reference=${encodeURIComponent(order.reference)}&phone=${encodeURIComponent(phone)}`;
 

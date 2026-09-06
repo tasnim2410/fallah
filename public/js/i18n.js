@@ -114,10 +114,9 @@ export const DICT = {
     'form.required': 'إجباري',
 
     'success.title': 'وصلنا طلبك!',
-    'success.body': 'سنتّصل بك على الرقم {phone} لتأكيد المنتجات وموعد التوصيل.',
     'success.ref': 'رقم الطلب',
     'success.next': 'ما الخطوة التالية؟',
-    'success.next1': 'يطّلع المزارع على الطلب ويجهّزه.',
+    'success.next1': 'تم الطلب.',
     'success.next2': 'مكالمة هاتفية للتأكيد معك.',
     'success.next3': 'التوصيل والدفع نقدًا عند الاستلام.',
     'success.track': 'تتبّع الطلب',
@@ -533,7 +532,6 @@ export const DICT = {
     'form.required': 'obligatoire',
 
     'success.title': 'Commande bien reçue !',
-    'success.body': 'Nous vous appelons au {phone} pour confirmer les produits et l’heure de livraison.',
     'success.ref': 'Numéro de commande',
     'success.next': 'Et maintenant ?',
     'success.next1': 'Le producteur consulte et prépare la commande.',

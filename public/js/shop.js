@@ -30,7 +30,7 @@ const draftQty = new Map();
 initShell();
 document.getElementById('year').textContent = new Date().getFullYear();
 document.getElementById('hero-art').innerHTML =
-  produceIcon('basket') +
+  '<img class="hero__logo" src="/fallah_logo.png" alt="">' +
   ['tomato', 'orange', 'oil', 'eggs']
     .map((name) => `<span class="hero__float">${produceIcon(name)}</span>`)
     .join('');

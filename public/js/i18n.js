@@ -14,6 +14,7 @@ export const DICT = {
     'nav.track': 'تتبّع طلبك',
     'nav.cart': 'السلة',
     'nav.admin': 'لوحة البائع',
+    'nav.menu': 'القائمة',
     'lang.switch': 'تغيير اللغة',
 
     'hero.title': 'خضار وفواكه طازجة، من المزارع مباشرة إلى منزلك',
@@ -435,6 +436,7 @@ export const DICT = {
     'nav.track': 'Suivre ma commande',
     'nav.cart': 'Panier',
     'nav.admin': 'Espace vendeur',
+    'nav.menu': 'Menu',
     'lang.switch': 'Changer de langue',
 
     'hero.title': 'Fruits et légumes frais, directement du producteur',

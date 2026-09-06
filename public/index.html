@@ -23,16 +23,21 @@
     <div class="container site-header__inner">
       <a class="brand" href="/">
         <span class="brand__mark" aria-hidden="true">
-          <img src="/straw_hat_logo.svg" alt="">
+          <img src="/fallah_logo.png" alt="">
         </span>
         <span data-i18n="brand.name">فلّاح</span>
       </a>
 
       <nav class="site-nav" aria-label="Navigation">
-        <a href="#products" data-i18n="nav.shop">المنتجات</a>
-        <a href="#how" data-i18n="nav.how">كيفية الطلب</a>
-        <a href="/track.html" data-i18n="nav.track">تتبّع طلبك</a>
-        <a href="/admin.html" data-i18n="nav.admin" class="always-visible">لوحة البائع</a>
+        <button type="button" class="nav-toggle always-visible" id="nav-toggle" aria-expanded="false" aria-controls="site-nav-links" data-i18n-aria="nav.menu">
+          <span data-icon="menu"></span>
+        </button>
+        <div class="site-nav__links" id="site-nav-links">
+          <a href="#products" data-i18n="nav.shop">المنتجات</a>
+          <a href="#how" data-i18n="nav.how">كيفية الطلب</a>
+          <a href="/track.html" data-i18n="nav.track">تتبّع طلبك</a>
+          <a href="/admin.html" data-i18n="nav.admin">لوحة البائع</a>
+        </div>
         <button type="button" class="btn btn--ghost btn--sm" data-install hidden>
           <span data-icon="package"></span>
           <span data-i18n="pwa.install"></span>
@@ -45,6 +50,7 @@
         </button>
       </nav>
     </div>
+    <div class="nav-backdrop" id="nav-backdrop"></div>
   </header>
 
   <main id="main">

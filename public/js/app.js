@@ -419,6 +419,38 @@ function mountNetworkStatus() {
   addEventListener('online', () => toast(t('net.online')));
 }
 
+/** Menu mobile (liens de nav cachés sous un bouton hamburger en dessous de 720px). */
+function mountNavToggle() {
+  const toggle = document.getElementById('nav-toggle');
+  const panel = document.getElementById('site-nav-links');
+  const backdrop = document.getElementById('nav-backdrop');
+  if (!toggle || !panel) return;
+
+  const close = () => {
+    panel.classList.remove('is-open');
+    backdrop?.classList.remove('is-open');
+    toggle.setAttribute('aria-expanded', 'false');
+  };
+  const open = () => {
+    panel.classList.add('is-open');
+    backdrop?.classList.add('is-open');
+    toggle.setAttribute('aria-expanded', 'true');
+  };
+
+  toggle.addEventListener('click', () => {
+    if (panel.classList.contains('is-open')) close();
+    else open();
+  });
+  backdrop?.addEventListener('click', close);
+  for (const link of panel.querySelectorAll('a')) link.addEventListener('click', close);
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panel.classList.contains('is-open')) close();
+  });
+  addEventListener('resize', () => {
+    if (innerWidth >= 720) close();
+  });
+}
+
 export function initShell() {
   applyTranslations();
   mountIcons();
@@ -429,6 +461,7 @@ export function initShell() {
   mountServiceWorker();
   mountInstallPrompt();
   mountNetworkStatus();
+  mountNavToggle();
 
   onLangChange(() => {
     mountLangSwitch();

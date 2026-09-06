@@ -271,6 +271,36 @@ cartBody.addEventListener('click', (event) => {
   setCartQty(productId, Math.min(ceiling, next));
 });
 
+/**
+ * Revérifie chaque article par rapport aux règles actuelles du produit
+ * (min, max, stock, pas) — un article ajouté avant un changement côté vendeur
+ * peut ne plus être valide. Mêmes règles que la validation serveur finale.
+ */
+function findCartProblem() {
+  for (const item of getCart()) {
+    const product = products.find((p) => p.id === item.productId);
+    if (!product) return { productId: item.productId, code: 'product_missing' };
+    if (!product.isAvailable) return { productId: item.productId, code: 'product_unavailable' };
+    if (item.qty < product.min) return { productId: item.productId, code: 'qty_below_min' };
+    if (item.qty > product.max) return { productId: item.productId, code: 'qty_above_max' };
+    if (item.qty > product.stock) return { productId: item.productId, code: 'qty_above_stock' };
+    const steps = item.qty / product.step;
+    if (Math.abs(steps - Math.round(steps)) > 0.01) return { productId: item.productId, code: 'qty_step_invalid' };
+  }
+  return null;
+}
+
+document.getElementById('checkout-link').addEventListener('click', (event) => {
+  const problem = findCartProblem();
+  if (!problem) return;
+  event.preventDefault();
+  toast(t(`err.${problem.code}`), 'error');
+  const line = cartBody.querySelector(`[data-line="${problem.productId}"]`);
+  line?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  line?.classList.add('cart-line--error');
+  setTimeout(() => line?.classList.remove('cart-line--error'), 2000);
+});
+
 onCartChange(renderCart);
 onLangChange(() => {
   renderCategories();

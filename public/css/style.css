@@ -471,6 +471,12 @@ img, svg { max-width: 100%; }
 .drawer__foot { padding: var(--space-4); border-block-start: 1px solid var(--border); background: var(--card); }
 
 .cart-line { display: flex; gap: var(--space-3); padding-block: var(--space-3); border-block-end: 1px dashed var(--border); }
+.cart-line--error {
+  outline: 2px solid var(--destructive);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--destructive-soft);
+}
 .cart-line__icon {
   width: 54px; height: 54px; flex: none;
   display: grid; place-items: center;
